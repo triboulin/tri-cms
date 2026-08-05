@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,6 +68,13 @@ func main() {
 
 	server := api.NewServer(system, manager, issuer, dispatcher, templates)
 	server.StaticFS = staticFS
+	if maxUploadMB := os.Getenv("TRICMS_MAX_UPLOAD_MB"); maxUploadMB != "" {
+		if mb, err := strconv.ParseInt(maxUploadMB, 10, 64); err == nil && mb > 0 {
+			server.MaxUploadSize = mb << 20
+		} else {
+			log.Printf("WARNING: ignoring invalid TRICMS_MAX_UPLOAD_MB=%q", maxUploadMB)
+		}
+	}
 	defer server.Close()
 
 	if err := bootstrapFirstAdmin(system); err != nil {

@@ -3,24 +3,77 @@
 <html lang="fr">
 {{template "partial:head" .}}
 <body>
-<div class="tri-app">
-  {{template "partial:sidebar" .}}
-  <div class="tri-main">
+<div class="tri-main">
     {{template "partial:topbar" .}}
     <div class="tri-content">
-      <h2>Utilisateurs du projet</h2>
-      <table class="tri-table">
-        <thead><tr><th>Email</th><th>Rôle</th></tr></thead>
-        <tbody>
-        {{range .Content.Permissions}}
-          <tr><td>{{.Email}}</td><td><span class="tri-badge">{{.Role}}</span></td></tr>
+      {{template "partial:flash" .}}
+
+      <div class="tri-section-title">
+        <h2><span class="material-icons" aria-hidden="true">group</span> Utilisateurs du projet</h2>
+      </div>
+      {{if not .Content.Permissions}}
+        <p class="tri-empty">Aucun utilisateur n'a encore de rôle sur ce projet.</p>
+      {{else}}
+        <div class="tri-table-scroll">
+        <table class="tri-table">
+          <thead><tr><th>Email</th><th>Rôle</th><th></th></tr></thead>
+          <tbody>
+          {{range .Content.Permissions}}
+            <tr>
+              <td>{{.Email}}</td>
+              <td>
+                {{$role := .Role}}
+                {{if or (eq (print $role) "GESTIONNAIRE") (eq (print $role) "REDACTEUR")}}
+                <form class="tri-inline-form tri-role-form" method="post" action="/projects/{{$.CurrentProject.ID}}/users/{{.UserID}}/role">
+                  <select name="role" onchange="this.form.requestSubmit()">
+                    {{range $.Content.AssignableRoles}}<option value="{{.}}" {{if eq . $role}}selected{{end}}>{{.}}</option>{{end}}
+                  </select>
+                </form>
+                {{else}}
+                  <span class="tri-badge">{{.Role}}</span>
+                {{end}}
+              </td>
+              <td class="tri-actions">
+                <form class="tri-inline-form" method="post" action="/projects/{{$.CurrentProject.ID}}/users/{{.UserID}}/remove"
+                      data-confirm="Retirer l'accès de {{.Email}} à ce projet ?">
+                  <button type="submit" class="tri-icon-btn danger" title="Retirer l'accès" aria-label="Retirer l'accès"><span class="material-icons" aria-hidden="true">person_remove</span></button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+        </div>
+      {{end}}
+
+      <div class="tri-card">
+        <h3><span class="material-icons" aria-hidden="true">person_add</span> Attribuer un rôle</h3>
+        <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/users/assign">
+          <div class="tri-form-row">
+            <div>
+              <label>Email de l'utilisateur</label>
+              <input type="email" name="email" required>
+            </div>
+            <div>
+              <label>Mot de passe (si nouveau compte)</label>
+              <input type="password" name="password" placeholder="laisser vide si le compte existe déjà" autocomplete="new-password">
+            </div>
+            <div>
+              <label>Rôle</label>
+              <select name="role">
+                {{range .Content.AssignableRoles}}<option value="{{.}}">{{.}}</option>{{end}}
+              </select>
+            </div>
+          </div>
+          <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Attribuer</button>
+          <p class="tri-empty">Si l'email ne correspond à aucun compte, renseignez un mot de passe pour en créer un et lui attribuer le rôle dans la foulée.</p>
+        </form>
+        {{if .Content.IsAdmin}}
+        <p class="tri-empty">Attribution restreinte aux rôles GESTIONNAIRE ou REDACTEUR depuis cette vue ; CONCEPTEUR se gère depuis la <a href="/admin/permissions">matrice globale des droits</a> (ADMIN).</p>
         {{end}}
-        </tbody>
-      </table>
-      <p class="tri-empty">Attribution restreinte aux rôles GESTIONNAIRE ou REDACTEUR depuis cette vue.</p>
+      </div>
     </div>
   </div>
-</div>
 </body>
 </html>
 {{end}}

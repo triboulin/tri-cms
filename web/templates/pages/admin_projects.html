@@ -3,24 +3,48 @@
 <html lang="fr">
 {{template "partial:head" .}}
 <body>
-<div class="tri-app">
-  {{template "partial:sidebar" .}}
-  <div class="tri-main">
+<div class="tri-main">
     {{template "partial:topbar" .}}
     <div class="tri-content">
-      <h2>Gestion des projets</h2>
-      <table class="tri-table">
-        <thead><tr><th>Nom</th><th>ID</th></tr></thead>
-        <tbody>
-        {{range .Content.Projects}}
-          <tr><td>{{.Name}}</td><td><code>{{.ID}}</code></td></tr>
-        {{end}}
-        </tbody>
-      </table>
-      <p class="tri-empty">La suppression d'un projet nécessite une double confirmation (saisie du nom exact) via l'API.</p>
+      {{template "partial:flash" .}}
+
+      <div class="tri-card" id="create">
+        <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau projet</h3>
+        <form class="tri-form" method="post" action="/projects/create">
+          <label>Nom du projet</label>
+          <input type="text" name="name" placeholder="ex: Site vitrine Actimium" required>
+          <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Créer le projet</button>
+        </form>
+      </div>
+
+      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">folder</span> Projets existants</h2></div>
+      {{if not .Content.Projects}}
+        <p class="tri-empty">Aucun projet pour le moment.</p>
+      {{else}}
+        <div class="tri-table-scroll">
+        <table class="tri-table">
+          <thead><tr><th>Nom</th><th>ID</th><th></th></tr></thead>
+          <tbody>
+          {{range .Content.Projects}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td><code>{{.ID}}</code></td>
+              <td class="tri-actions">
+                <a class="tri-icon-btn" title="Ouvrir" href="/projects/{{.ID}}" aria-label="Ouvrir"><span class="material-icons" aria-hidden="true">arrow_forward</span></a>
+                <form class="tri-inline-form" method="post" action="/admin/projects/{{.ID}}/delete" data-confirm-name="{{.Name}}">
+                  <input type="hidden" name="confirm_name" value="">
+                  <button type="submit" class="tri-icon-btn danger" title="Supprimer (double confirmation)" aria-label="Supprimer le projet « {{.Name}} » (double confirmation)"><span class="material-icons" aria-hidden="true">delete_forever</span></button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+        </div>
+      {{end}}
+      <p class="tri-empty">La suppression d'un projet est irréversible et nécessite de retaper son nom exact.</p>
     </div>
   </div>
-</div>
 </body>
 </html>
 {{end}}

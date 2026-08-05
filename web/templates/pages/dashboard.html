@@ -3,24 +3,39 @@
 <html lang="fr">
 {{template "partial:head" .}}
 <body>
-<div class="tri-app">
-  {{template "partial:sidebar" .}}
-  <div class="tri-main">
+<div class="tri-main">
     {{template "partial:topbar" .}}
     <div class="tri-content">
-      <h2>Mes projets</h2>
+      {{template "partial:flash" .}}
+
+      {{if .User.IsGlobalAdmin}}
+      <div class="tri-card" id="create">
+        <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau projet</h3>
+        <form class="tri-form" method="post" action="/projects/create">
+          <label>Nom du projet</label>
+          <input type="text" name="name" placeholder="ex: Site vitrine AAAA" required autofocus>
+          <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Créer le projet</button>
+        </form>
+      </div>
+      {{end}}
+
+      <div class="tri-section-title">
+        <h2><span class="material-icons" aria-hidden="true">table_view</span> Mes projets</h2>
+      </div>
       {{if not .Projects}}
         <p class="tri-empty">Aucun projet accessible pour le moment.</p>
       {{else}}
+        <div class="tri-grid">
         {{range .Projects}}
           <div class="tri-card">
-            <a class="tri-btn" href="/projects/{{.ID}}">{{.Name}}</a>
+            <h3><span class="material-icons" aria-hidden="true">folder_open</span> {{.Name}}</h3>
+            <a class="tri-btn tri-btn-sm" href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">arrow_forward</span> Ouvrir</a>
           </div>
         {{end}}
+        </div>
       {{end}}
     </div>
   </div>
-</div>
 </body>
 </html>
 {{end}}

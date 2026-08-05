@@ -1,25 +1,33 @@
-{{define "page:admin_logs"}}
+{{/* Renders the project-scoped audit log (still admin-only) at
+     /projects/{projectID}/logs -- see htmxProjectLogs. This file used to
+     back the global /admin/logs page; kept in place (file renames aren't
+     allowed once written) but repurposed for the per-project view. */}}
+{{define "page:project_logs"}}
 <!DOCTYPE html>
 <html lang="fr">
 {{template "partial:head" .}}
 <body>
-<div class="tri-app">
-  {{template "partial:sidebar" .}}
-  <div class="tri-main">
+<div class="tri-main">
     {{template "partial:topbar" .}}
     <div class="tri-content">
-      <h2>Journal d'audit</h2>
+      {{template "partial:flash" .}}
+      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">history</span> Journal d'audit</h2></div>
+      {{if not .Content.Logs}}
+        <p class="tri-empty">Aucune entrée pour ce projet pour le moment.</p>
+      {{else}}
+      <div class="tri-table-scroll">
       <table class="tri-table">
-        <thead><tr><th>Date</th><th>Action</th><th>Utilisateur</th><th>Projet</th></tr></thead>
+        <thead><tr><th>Date</th><th>Action</th><th>Utilisateur</th></tr></thead>
         <tbody>
         {{range .Content.Logs}}
-          <tr><td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td><td><code>{{.Action}}</code></td><td>{{.UserID}}</td><td>{{.ProjectID}}</td></tr>
+          <tr><td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td><td><code>{{.Action}}</code></td><td>{{.UserID}}</td></tr>
         {{end}}
         </tbody>
       </table>
+      </div>
+      {{end}}
     </div>
   </div>
-</div>
 </body>
 </html>
 {{end}}

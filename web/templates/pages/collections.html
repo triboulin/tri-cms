@@ -3,27 +3,42 @@
 <html lang="fr">
 {{template "partial:head" .}}
 <body>
-<div class="tri-app">
-  {{template "partial:sidebar" .}}
-  <div class="tri-main">
+<div class="tri-main">
     {{template "partial:topbar" .}}
     <div class="tri-content">
-      <h2>Collections</h2>
+      {{template "partial:flash" .}}
+      <div class="tri-section-title">
+        <h2><span class="material-icons" aria-hidden="true">table_view</span> Collections</h2>
+        {{if .Sidebar.Conception}}
+        <a class="tri-btn tri-btn-sm" href="/projects/{{.CurrentProject.ID}}/conception#create-schema"><span class="material-icons" aria-hidden="true">add</span> Nouveau schéma</a>
+        {{end}}
+      </div>
       {{if not .Content.Schemas}}
-        <p class="tri-empty">Aucun schéma de contenu pour ce projet.</p>
+        <p class="tri-empty">
+          Aucun schéma de contenu pour ce projet.
+          {{if .Sidebar.Conception}}Créez-en un depuis <a href="/projects/{{.CurrentProject.ID}}/conception">Conception</a>.{{end}}
+        </p>
       {{else}}
+        <div class="tri-table-scroll">
         <table class="tri-table">
           <thead><tr><th>Nom</th><th>Slug</th><th>Créé le</th></tr></thead>
           <tbody>
           {{range .Content.Schemas}}
-            <tr><td>{{.Name}}</td><td><code>{{.Slug}}</code></td><td>{{.CreatedAt.Format "2006-01-02"}}</td></tr>
+            <tr class="tri-row-clickable" tabindex="0" role="button"
+                data-href="/projects/{{$.CurrentProject.ID}}/schemas/{{.Slug}}/contents"
+                title="Voir les contenus">
+              <td><span class="material-icons" style="font-size:16px;" aria-hidden="true">description</span> {{.Name}}</td>
+              <td><code>{{.Slug}}</code></td>
+              <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+            </tr>
           {{end}}
           </tbody>
         </table>
+        </div>
       {{end}}
     </div>
   </div>
-</div>
+<script src="/static/js/row-link.js"></script>
 </body>
 </html>
 {{end}}

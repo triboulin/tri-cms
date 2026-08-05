@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"tricms/pkg/auth"
 	"tricms/pkg/storage"
@@ -13,7 +14,10 @@ import (
 
 // mountHTMXRoutes wires the server-rendered admin UI (spec §4) on top of the
 // same authenticated Server used by the JSON API. It's only mounted when
-// s.Templates is non-nil.
+// s.Templates is non-nil. Every mutating route follows the Post/Redirect/Get
+// pattern: a POST handler performs the change, then redirects back to the
+// relevant list page with a flash message (see render.go/redirectWithFlash),
+// so CRUD actions are reachable as plain forms/links, no JS required.
 func mountHTMXRoutes(r chi.Router, s *Server) {
 	if s.StaticFS != nil {
 		fileServer := http.FileServer(http.FS(s.StaticFS))
@@ -25,38 +29,93 @@ func mountHTMXRoutes(r chi.Router, s *Server) {
 	r.Get("/logout", s.htmxLogout)
 
 	r.Get("/", s.htmxDashboard)
+	r.Post("/projects/create", s.htmxCreateProject)
+
 	r.Get("/projects/{projectID}", s.htmxCollections)
+
+	r.Get("/projects/{projectID}/conception", s.htmxConception)
+	r.Post("/projects/{projectID}/schemas/create", s.htmxCreateSchema)
+	r.Get("/projects/{projectID}/schemas/{schemaSlug}/edit", s.htmxEditSchemaPage)
+	r.Post("/projects/{projectID}/schemas/{schemaSlug}/update", s.htmxUpdateSchema)
+	r.Post("/projects/{projectID}/schemas/{schemaSlug}/delete", s.htmxDeleteSchema)
+
+	r.Get("/projects/{projectID}/schemas/{schemaSlug}/contents", s.htmxContentList)
+	r.Get("/projects/{projectID}/schemas/{schemaSlug}/contents/new", s.htmxContentForm)
+	r.Post("/projects/{projectID}/schemas/{schemaSlug}/contents/create", s.htmxCreateContent)
+	r.Get("/projects/{projectID}/schemas/{schemaSlug}/contents/{contentID}/edit", s.htmxContentForm)
+	r.Post("/projects/{projectID}/schemas/{schemaSlug}/contents/{contentID}/update", s.htmxUpdateContent)
+	r.Post("/projects/{projectID}/schemas/{schemaSlug}/contents/{contentID}/delete", s.htmxDeleteContent)
+	r.Post("/projects/{projectID}/schemas/{schemaSlug}/contents/{contentID}/toggle-status", s.htmxToggleContentStatus)
+
 	r.Get("/projects/{projectID}/medias", s.htmxMedias)
+	r.Post("/projects/{projectID}/medias/upload", s.htmxUploadMedia)
+	r.Get("/projects/{projectID}/medias/{mediaID}/file", s.htmxMediaFile)
+	r.Post("/projects/{projectID}/medias/{mediaID}/delete", s.htmxDeleteMedia)
+
 	r.Get("/projects/{projectID}/users", s.htmxProjectUsers)
+	r.Post("/projects/{projectID}/users/assign", s.htmxAssignProjectUser)
+	r.Post("/projects/{projectID}/users/{userID}/role", s.htmxUpdateProjectUserRole)
+	r.Post("/projects/{projectID}/users/{userID}/remove", s.htmxRemoveProjectUser)
+
+	r.Get("/projects/{projectID}/tokens", s.htmxTokens)
+	r.Post("/projects/{projectID}/tokens/create", s.htmxCreateToken)
+	r.Post("/projects/{projectID}/tokens/{tokenID}/delete", s.htmxDeleteToken)
+
+	r.Get("/projects/{projectID}/webhooks", s.htmxWebhooks)
+	r.Post("/projects/{projectID}/webhooks/create", s.htmxCreateWebhook)
+	r.Post("/projects/{projectID}/webhooks/{webhookID}/update", s.htmxUpdateWebhook)
+	r.Post("/projects/{projectID}/webhooks/{webhookID}/delete", s.htmxDeleteWebhook)
+
+	r.Get("/projects/{projectID}/logs", s.htmxProjectLogs)
 
 	r.Get("/admin", s.htmxAdminRedirect)
 	r.Get("/admin/projects", s.htmxAdminProjects)
+	r.Post("/admin/projects/{projectID}/delete", s.htmxAdminDeleteProject)
 	r.Get("/admin/users", s.htmxAdminUsers)
-	r.Get("/admin/logs", s.htmxAdminLogs)
+	r.Post("/admin/users/create", s.htmxAdminCreateUser)
+	r.Post("/admin/users/{userID}/toggle-admin", s.htmxAdminToggleUserAdmin)
+	r.Post("/admin/users/{userID}/delete", s.htmxAdminDeleteUser)
+	r.Get("/admin/permissions", s.htmxAdminPermissions)
+	r.Post("/admin/permissions/assign", s.htmxAdminAssignPermission)
+	r.Post("/admin/permissions/{projectID}/{userID}/remove", s.htmxAdminRemovePermission)
 }
 
 func (s *Server) htmxCurrentUser(r *http.Request) *storage.User {
 	return UserFromContext(r.Context())
 }
 
+// redirectToLogin sends an unauthenticated visitor to the login page with a
+// neutral explanatory notice, instead of silently landing them there with no
+// context (which, for someone whose session just expired mid-use, reads as
+// an unexplained bug rather than a normal "please sign in again").
 func redirectToLogin(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, "/login?notice=1", http.StatusSeeOther)
 }
 
 // ---- Auth pages ----
+
+// loginPageContent is the Content shape for page:login, kept as a single
+// named type (rather than ad hoc anonymous structs per call site) so every
+// render exposes the same fields to the template regardless of which code
+// path produced it.
+type loginPageContent struct{ Error, Notice string }
 
 func (s *Server) htmxLoginPage(w http.ResponseWriter, r *http.Request) {
 	if s.htmxCurrentUser(r) != nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	data := &PageData{PageTitle: "Connexion", Content: struct{ Error string }{}}
+	notice := ""
+	if r.URL.Query().Get("notice") == "1" {
+		notice = "Veuillez vous connecter pour continuer."
+	}
+	data := &PageData{PageTitle: "Connexion", Content: loginPageContent{Notice: notice}}
 	s.render(w, "page:login", data)
 }
 
 func (s *Server) htmxLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.render(w, "page:login", &PageData{PageTitle: "Connexion", Content: struct{ Error string }{"Formulaire invalide"}})
+		s.render(w, "page:login", &PageData{PageTitle: "Connexion", Content: loginPageContent{Error: "Formulaire invalide"}})
 		return
 	}
 	email := r.FormValue("email")
@@ -67,13 +126,13 @@ func (s *Server) htmxLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		err = auth.VerifyPassword(user.PasswordHash, password)
 	}
 	if err != nil {
-		s.render(w, "page:login", &PageData{PageTitle: "Connexion", Content: struct{ Error string }{"Identifiants invalides"}})
+		s.render(w, "page:login", &PageData{PageTitle: "Connexion", Content: loginPageContent{Error: "Identifiants invalides"}})
 		return
 	}
 
 	token, err := s.Issuer.Issue(user.ID, user.IsGlobalAdmin)
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		s.htmxServerError(w, r)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -99,12 +158,55 @@ func (s *Server) htmxDashboard(w http.ResponseWriter, r *http.Request) {
 		redirectToLogin(w, r)
 		return
 	}
-	data, err := s.buildPageData(r.Context(), user, nil, "Mes projets", nil)
+	data, err := s.buildPageData(r.Context(), user, nil, "", "Mes projets", nil)
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		s.htmxServerError(w, r)
 		return
 	}
+	applyFlash(r, data)
 	s.render(w, "page:dashboard", data)
+}
+
+// htmxCreateProject creates a project from the dashboard's "Nouveau projet"
+// form. Global-admin only -- mirrors handleCreateProject (pkg/api/handlers_projects.go)
+// but as a plain form submission with a redirect back to the dashboard.
+func (s *Server) htmxCreateProject(w http.ResponseWriter, r *http.Request) {
+	user := s.htmxCurrentUser(r)
+	if user == nil {
+		redirectToLogin(w, r)
+		return
+	}
+	if !user.IsGlobalAdmin {
+		http.Error(w, "403 forbidden", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		redirectWithFlash(w, r, "/", "Formulaire invalide.", "error")
+		return
+	}
+	name := r.FormValue("name")
+	if name == "" {
+		redirectWithFlash(w, r, "/", "Le nom du projet est requis.", "error")
+		return
+	}
+
+	id := "proj_" + uuid.NewString()
+	db, err := s.Manager.CreateProjectStorage(id)
+	if err != nil {
+		redirectWithFlash(w, r, "/", "Impossible de créer le projet : "+err.Error(), "error")
+		return
+	}
+	db.Close()
+
+	proj := &storage.Project{ID: id, Name: name, FolderPath: s.Manager.ProjectDir(id)}
+	if err := s.System.CreateProject(r.Context(), proj); err != nil {
+		_ = s.Manager.DeleteProjectStorage(id)
+		redirectWithFlash(w, r, "/", "Impossible de créer le projet : "+err.Error(), "error")
+		return
+	}
+	_ = s.System.LogAction(r.Context(), user.ID, proj.ID, "project.create", map[string]string{"name": proj.Name})
+
+	redirectWithFlash(w, r, "/projects/"+proj.ID, "Projet « "+name+" » créé.", "success")
 }
 
 // loadProjectForHTMX resolves {projectID}, returning (nil,nil) with the
@@ -120,7 +222,7 @@ func (s *Server) loadProjectForHTMX(w http.ResponseWriter, r *http.Request, sect
 		if errors.Is(err, storage.ErrNotFound) {
 			http.NotFound(w, r)
 		} else {
-			http.Error(w, "internal server error", http.StatusInternalServerError)
+			s.htmxServerError(w, r)
 		}
 		return nil, nil
 	}
@@ -139,7 +241,7 @@ func (s *Server) loadProjectForHTMX(w http.ResponseWriter, r *http.Request, sect
 	return user, project
 }
 
-// ---- Project pages ----
+// ---- Project home (Collections index) ----
 
 func (s *Server) htmxCollections(w http.ResponseWriter, r *http.Request) {
 	user, project := s.loadProjectForHTMX(w, r, auth.SectionCollections)
@@ -148,75 +250,21 @@ func (s *Server) htmxCollections(w http.ResponseWriter, r *http.Request) {
 	}
 	db, err := s.projectDB(project.ID)
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		s.htmxServerError(w, r)
 		return
 	}
 	schemas, err := db.ListSchemas(r.Context())
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		s.htmxServerError(w, r)
 		return
 	}
-	data, err := s.buildPageData(r.Context(), user, project, "Collections", struct{ Schemas []*storage.Schema }{schemas})
+	data, err := s.buildPageData(r.Context(), user, project, "collections", "", struct{ Schemas []*storage.Schema }{schemas})
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		s.htmxServerError(w, r)
 		return
 	}
+	applyFlash(r, data)
 	s.render(w, "page:collections", data)
-}
-
-func (s *Server) htmxMedias(w http.ResponseWriter, r *http.Request) {
-	user, project := s.loadProjectForHTMX(w, r, auth.SectionMedias)
-	if user == nil {
-		return
-	}
-	db, err := s.projectDB(project.ID)
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	medias, err := db.ListMedias(r.Context())
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	data, err := s.buildPageData(r.Context(), user, project, "Médias", struct{ Medias []*storage.Media }{medias})
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	s.render(w, "page:medias", data)
-}
-
-func (s *Server) htmxProjectUsers(w http.ResponseWriter, r *http.Request) {
-	user, project := s.loadProjectForHTMX(w, r, auth.SectionUsers)
-	if user == nil {
-		return
-	}
-	perms, err := s.System.ListProjectPermissions(r.Context(), project.ID)
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	views := make([]projectPermissionView, 0, len(perms))
-	for _, pp := range perms {
-		email := ""
-		if u, err := s.System.GetUserByID(r.Context(), pp.UserID); err == nil {
-			email = u.Email
-		}
-		views = append(views, projectPermissionView{UserID: pp.UserID, Email: email, Role: pp.Role})
-	}
-	data, err := s.buildPageData(r.Context(), user, project, "Utilisateurs", struct{ Permissions []projectPermissionView }{views})
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	s.render(w, "page:project_users", data)
-}
-
-// ---- Administration pages (global admin only) ----
-
-func (s *Server) htmxAdminRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/admin/projects", http.StatusSeeOther)
 }
 
 func (s *Server) requireHTMXGlobalAdmin(w http.ResponseWriter, r *http.Request) *storage.User {
@@ -232,56 +280,6 @@ func (s *Server) requireHTMXGlobalAdmin(w http.ResponseWriter, r *http.Request) 
 	return user
 }
 
-func (s *Server) htmxAdminProjects(w http.ResponseWriter, r *http.Request) {
-	user := s.requireHTMXGlobalAdmin(w, r)
-	if user == nil {
-		return
-	}
-	projects, err := s.System.ListProjects(r.Context())
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	data, err := s.buildPageData(r.Context(), user, nil, "Administration · Projets", struct{ Projects []*storage.Project }{projects})
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	s.render(w, "page:admin_projects", data)
-}
-
-func (s *Server) htmxAdminUsers(w http.ResponseWriter, r *http.Request) {
-	user := s.requireHTMXGlobalAdmin(w, r)
-	if user == nil {
-		return
-	}
-	users, err := s.System.ListUsers(r.Context())
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	data, err := s.buildPageData(r.Context(), user, nil, "Administration · Comptes", struct{ Users []*storage.User }{users})
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	s.render(w, "page:admin_users", data)
-}
-
-func (s *Server) htmxAdminLogs(w http.ResponseWriter, r *http.Request) {
-	user := s.requireHTMXGlobalAdmin(w, r)
-	if user == nil {
-		return
-	}
-	logs, err := s.System.ListLogs(r.Context(), 200)
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	data, err := s.buildPageData(r.Context(), user, nil, "Administration · Logs", struct{ Logs []*storage.GlobalLog }{logs})
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	s.render(w, "page:admin_logs", data)
+func (s *Server) htmxAdminRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/admin/projects", http.StatusSeeOther)
 }

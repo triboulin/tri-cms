@@ -1,0 +1,70 @@
+{{define "page:admin_permissions"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      {{template "partial:flash" .}}
+
+      <p class="tri-empty">
+        Matrice globale des droits : seule cette vue (portée ADMIN) permet d'attribuer le rôle CONCEPTEUR.
+        Les rôles GESTIONNAIRE/REDACTEUR peuvent aussi être gérés depuis la vue « Utilisateurs » de chaque projet.
+      </p>
+
+      {{if not .Content.Blocks}}
+        <p class="tri-empty">Aucun projet pour le moment. Créez-en un depuis l'onglet « Projets ».</p>
+      {{else}}
+        {{range .Content.Blocks}}
+        <div class="tri-card">
+          <h3><span class="material-icons" aria-hidden="true">folder</span> {{.Project.Name}}</h3>
+          {{if not .Permissions}}
+            <p class="tri-empty">Aucun utilisateur affecté à ce projet.</p>
+          {{else}}
+            <div class="tri-table-scroll">
+            <table class="tri-table">
+              <thead><tr><th>Email</th><th>Rôle</th><th></th></tr></thead>
+              <tbody>
+              {{$projectID := .Project.ID}}
+              {{range .Permissions}}
+                <tr>
+                  <td>{{.Email}}</td>
+                  <td><span class="tri-badge">{{.Role}}</span></td>
+                  <td class="tri-actions">
+                    <form class="tri-inline-form" method="post" action="/admin/permissions/{{$projectID}}/{{.UserID}}/remove"
+                          data-confirm="Retirer l'accès de {{.Email}} ?">
+                      <button type="submit" class="tri-icon-btn danger" title="Retirer" aria-label="Retirer"><span class="material-icons" aria-hidden="true">person_remove</span></button>
+                    </form>
+                  </td>
+                </tr>
+              {{end}}
+              </tbody>
+            </table>
+            </div>
+          {{end}}
+
+          <form class="tri-form" method="post" action="/admin/permissions/assign" style="margin-top:10px;">
+            <input type="hidden" name="project_id" value="{{.Project.ID}}">
+            <div class="tri-form-row">
+              <div>
+                <label>Email de l'utilisateur</label>
+                <input type="email" name="email" required>
+              </div>
+              <div>
+                <label>Rôle</label>
+                <select name="role">
+                  {{range $.Content.Roles}}<option value="{{.}}">{{.}}</option>{{end}}
+                </select>
+              </div>
+            </div>
+            <button class="tri-btn tri-btn-sm" type="submit"><span class="material-icons" aria-hidden="true">add</span> Attribuer</button>
+          </form>
+        </div>
+        {{end}}
+      {{end}}
+    </div>
+  </div>
+</body>
+</html>
+{{end}}

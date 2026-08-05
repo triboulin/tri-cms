@@ -63,7 +63,7 @@ func TestHTMX_DashboardRedirectsAnonymous(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("expected redirect to login, got %d", rec.Code)
 	}
-	if loc := rec.Header().Get("Location"); loc != "/login" {
+	if loc := rec.Header().Get("Location"); loc != "/login?notice=1" {
 		t.Fatalf("expected redirect to /login, got %q", loc)
 	}
 }
@@ -181,9 +181,9 @@ func TestHTMX_AdminPages_GlobalAdminOnly(t *testing.T) {
 	e := newHTMXTestEnv(t)
 	admin := e.createUser("hadmin@x.com", true)
 	regular := e.createUser("hregular@x.com", false)
-	e.createProject("Visible To Admin")
+	p := e.createProject("Visible To Admin")
 
-	for _, path := range []string{"/admin", "/admin/projects", "/admin/users", "/admin/logs"} {
+	for _, path := range []string{"/admin", "/admin/projects", "/admin/users"} {
 		rec := e.getHTML(path, regular)
 		if rec.Code != http.StatusForbidden && rec.Code != http.StatusSeeOther {
 			t.Fatalf("expected 403/redirect for non-admin at %s, got %d", path, rec.Code)
@@ -202,9 +202,16 @@ func TestHTMX_AdminPages_GlobalAdminOnly(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "hadmin@x.com") {
 		t.Fatalf("expected 200 listing users, got %d", rec.Code)
 	}
-	rec = e.getHTML("/admin/logs", admin)
+
+	// Logs are project-scoped now (still admin-only): a plain member with no
+	// role on the project is forbidden, an admin gets the project's log page.
+	rec = e.getHTML("/projects/"+p.ID+"/logs", regular)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-admin project logs, got %d", rec.Code)
+	}
+	rec = e.getHTML("/projects/"+p.ID+"/logs", admin)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 for logs, got %d", rec.Code)
+		t.Fatalf("expected 200 for project logs, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -214,7 +221,7 @@ func TestHTMX_StaticFileServed(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for static css, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "tri-app") {
+	if !strings.Contains(rec.Body.String(), "tri-topbar") {
 		t.Fatalf("expected css content, got %s", rec.Body.String())
 	}
 }
@@ -225,6 +232,39 @@ func TestHTMX_AlreadyLoggedInRedirectsFromLogin(t *testing.T) {
 	rec := e.getHTML("/login", u)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("expected redirect for already-authenticated user, got %d", rec.Code)
+	}
+}
+
+func TestHTMX_Login_ShowsNoticeAfterAuthRedirect(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	rec := e.getHTML("/", nil) // anonymous -> redirected with ?notice=1
+	loc := rec.Header().Get("Location")
+	rec = e.getHTML(loc, nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Veuillez vous connecter") {
+		t.Fatalf("expected login page to show the notice, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHTMX_UnknownHTMXRoute_StyledNotFound(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	u := e.createUser("nf@x.com", true)
+	rec := e.getHTML("/this-route-does-not-exist", u)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "tri-error-page") {
+		t.Fatalf("expected styled 404 page, got %s", rec.Body.String())
+	}
+}
+
+func TestHTMX_UnknownAPIRoute_PlainNotFound(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	rec := e.getHTML("/api/v1/this-route-does-not-exist", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "tri-error-page") {
+		t.Fatalf("expected the JSON API to keep chi's plain 404, got styled HTML: %s", rec.Body.String())
 	}
 }
 
@@ -245,7 +285,7 @@ func TestHTMX_ProjectPages_AnonymousRedirectToLogin(t *testing.T) {
 		if rec.Code != http.StatusSeeOther {
 			t.Fatalf("expected redirect to login for %s, got %d", path, rec.Code)
 		}
-		if loc := rec.Header().Get("Location"); loc != "/login" {
+		if loc := rec.Header().Get("Location"); loc != "/login?notice=1" {
 			t.Fatalf("expected /login redirect for %s, got %q", path, loc)
 		}
 	}

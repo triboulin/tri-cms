@@ -1,6 +1,9 @@
 package api
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
@@ -30,8 +33,6 @@ func NewRouter(s *Server) *chi.Mux {
 			r.With(s.requireGlobalAdmin).Post("/users", s.handleCreateUser)
 			r.With(s.requireGlobalAdmin).Patch("/users/{userID}", s.handleUpdateUser)
 			r.With(s.requireGlobalAdmin).Delete("/users/{userID}", s.handleDeleteUser)
-
-			r.With(s.requireGlobalAdmin).Get("/logs", s.handleListLogs)
 
 			r.Route("/projects/{projectID}", func(r chi.Router) {
 				r.Use(s.projectContext)
@@ -76,12 +77,27 @@ func NewRouter(s *Server) *chi.Mux {
 				r.With(s.requireGlobalAdmin).Post("/webhooks", s.handleCreateWebhook)
 				r.With(s.requireGlobalAdmin).Put("/webhooks/{webhookID}", s.handleUpdateWebhook)
 				r.With(s.requireGlobalAdmin).Delete("/webhooks/{webhookID}", s.handleDeleteWebhook)
+
+				// Audit log: global-admin only, scoped to this project (not
+				// a cross-project firehose).
+				r.With(s.requireGlobalAdmin).Get("/logs", s.handleListLogs)
 			})
 		})
 	})
 
 	if s.Templates != nil {
 		mountHTMXRoutes(r, s)
+		// Unmatched routes get chi's default plain-text 404 for the JSON API
+		// (API clients expect a bare 404, not HTML), but a page styled like
+		// the rest of the app for everything else -- a stray/old bookmarked
+		// admin URL shouldn't dump the visitor onto a bare browser error page.
+		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				http.NotFound(w, r)
+				return
+			}
+			s.htmxNotFoundPage(w, r)
+		})
 	}
 
 	return r

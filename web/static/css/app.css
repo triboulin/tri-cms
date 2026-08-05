@@ -1,71 +1,364 @@
 :root {
-  --tri-bg: #0f172a;
-  --tri-sidebar: #111827;
-  --tri-accent: #6366f1;
-  --tri-text: #e5e7eb;
-  --tri-muted: #9ca3af;
-  --tri-card: #1f2937;
-  --tri-border: #374151;
+  --tri-bg: #ffffff;
+  --tri-bg-subtle: #f7f8fa;
+  --tri-accent: #2d7ff9;
+  --tri-accent-hover: #1a6ce0;
+  --tri-accent-subtle: rgba(45, 127, 249, 0.1);
+  --tri-danger: #d1383f;
+  --tri-danger-hover: #b52d33;
+  --tri-text: #1d1f25;
+  --tri-muted: #6b7280;
+  --tri-card: #ffffff;
+  --tri-border: #e1e4e8;
+  --tri-success: #16a34a;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   font-family: -apple-system, Segoe UI, Roboto, sans-serif;
-  background: #0b1120;
+  background: var(--tri-bg);
   color: var(--tri-text);
 }
-.tri-app { display: flex; min-height: 100vh; }
-.tri-sidebar {
-  width: 220px;
-  background: var(--tri-sidebar);
-  border-right: 1px solid var(--tri-border);
-  padding: 16px 0;
-  flex-shrink: 0;
-}
-.tri-sidebar .brand { padding: 0 16px 16px; font-weight: 700; font-size: 1.1rem; color: #fff; }
-.tri-sidebar nav a {
-  display: block;
-  padding: 10px 16px;
-  color: var(--tri-muted);
-  text-decoration: none;
-  font-size: 0.92rem;
-}
-.tri-sidebar nav a:hover, .tri-sidebar nav a.active { background: #1e293b; color: #fff; }
-.tri-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.material-icons { font-size: 20px; line-height: 1; vertical-align: middle; }
+.tri-main { min-height: 100vh; display: flex; flex-direction: column; }
 .tri-topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 20px; border-bottom: 1px solid var(--tri-border);
   background: var(--tri-bg);
+  gap: 16px; flex-wrap: wrap;
 }
-.tri-breadcrumb { color: var(--tri-muted); font-size: 0.9rem; }
-.tri-breadcrumb a { color: var(--tri-muted); text-decoration: none; }
-.tri-breadcrumb a:hover { color: #fff; }
-.tri-project-select select {
-  background: var(--tri-card); color: var(--tri-text); border: 1px solid var(--tri-border);
-  border-radius: 6px; padding: 6px 10px;
+.tri-topbar-actions { display: flex; align-items: center; gap: 10px; }
+.tri-user-email { color: var(--tri-muted); font-size: 0.85rem; }
+
+/* Breadcrumb with hover dropdowns (replaces the old sidebar). */
+.tri-breadcrumb { color: var(--tri-muted); font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
+.tri-breadcrumb > a { color: var(--tri-muted); text-decoration: none; display: flex; align-items: center; gap: 4px; }
+.tri-breadcrumb > a:hover { color: var(--tri-text); }
+.tri-breadcrumb strong { color: var(--tri-text); }
+.tri-crumb-icon { font-size: 18px; }
+.tri-crumb-sep { font-size: 18px; color: var(--tri-border); }
+.tri-crumb { position: relative; }
+.tri-crumb-hover { display: flex; align-items: center; gap: 2px; padding: 4px 6px; margin: -4px -6px; border-radius: 6px; cursor: default; }
+.tri-crumb-hover:hover { background: var(--tri-bg-subtle); }
+.tri-crumb-hover > a, .tri-crumb-hover > span, .tri-crumb-hover > strong {
+  display: flex; align-items: center; gap: 4px; text-decoration: none; color: inherit;
 }
+.tri-crumb-hover > a:hover { color: var(--tri-accent); }
+.tri-crumb-caret { font-size: 16px; color: var(--tri-border); }
+.tri-crumb-dropdown {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px;
+  background: var(--tri-card); border: 1px solid var(--tri-border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(29,31,37,0.12); padding: 6px; z-index: 20;
+}
+/* Opening is click/keyboard-driven only (see app.js): a hover-to-open rule
+   used to sit here, but crossing the gap between the label and the dropdown
+   at normal mouse speed routinely broke the hover chain and slammed the
+   menu shut before the pointer arrived. Click is the single source of
+   truth for "open", so it can never misfire like that. */
+.tri-crumb.open .tri-crumb-dropdown { display: block; }
+.tri-crumb-dropdown a {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px;
+  color: var(--tri-text); text-decoration: none; font-size: 0.88rem; white-space: nowrap;
+}
+.tri-crumb-dropdown a:hover { background: var(--tri-bg-subtle); }
+.tri-crumb-dropdown a.active { color: var(--tri-accent); background: var(--tri-accent-subtle); }
+.tri-crumb-dropdown-sep { height: 1px; background: var(--tri-border); margin: 6px 4px; }
+
 .tri-content { padding: 24px; flex: 1; }
+.tri-section-title {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+.tri-section-title h2 { margin: 0; display: flex; align-items: center; gap: 8px; }
 .tri-card {
   background: var(--tri-card); border: 1px solid var(--tri-border); border-radius: 10px;
-  padding: 16px; margin-bottom: 12px;
+  margin: 8px; margin-bottom: 16px;
+  padding: 16px;
 }
+.tri-card h3 { margin-top: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; }
+.tri-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 table.tri-table { width: 100%; border-collapse: collapse; }
-table.tri-table th, table.tri-table td {
+table.tri-table th {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--tri-border); font-size: 0.82rem;
+  color: var(--tri-muted); text-transform: uppercase; letter-spacing: 0.02em;
+}
+table.tri-table td {
   text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--tri-border); font-size: 0.9rem;
 }
+table.tri-table tbody tr:hover { background: var(--tri-bg-subtle); }
+table.tri-table td.tri-actions { text-align: right; white-space: nowrap; }
 .tri-badge {
   display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
   background: var(--tri-accent); color: #fff;
 }
+.tri-badge-outline {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
+  border: 1px solid var(--tri-border); color: var(--tri-muted);
+}
 .tri-btn {
   background: var(--tri-accent); color: #fff; border: none; border-radius: 6px;
-  padding: 8px 14px; cursor: pointer; font-size: 0.9rem; text-decoration: none; display: inline-block;
+  padding: 8px 14px; cursor: pointer; font-size: 0.88rem; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px; font-family: inherit;
 }
-.tri-form input, .tri-form select {
+.tri-btn:hover { background: var(--tri-accent-hover); }
+.tri-btn-sm { padding: 6px 10px; font-size: 0.82rem; }
+.tri-btn-danger { background: transparent; color: var(--tri-danger); border: 1px solid var(--tri-danger); }
+.tri-btn-danger:hover { background: var(--tri-danger); color: #fff; }
+.tri-btn-ghost { background: transparent; color: var(--tri-muted); border: 1px solid var(--tri-border); }
+.tri-btn-ghost:hover { color: var(--tri-text); border-color: var(--tri-muted); }
+.tri-icon-btn {
+  background: transparent; border: none; color: var(--tri-muted); cursor: pointer;
+  padding: 4px; border-radius: 6px; display: inline-flex; margin-left: 4px; font-family: inherit;
+  text-decoration: none;
+}
+.tri-icon-btn:hover { color: var(--tri-text); background: var(--tri-bg-subtle); }
+.tri-icon-btn.danger:hover { color: var(--tri-danger); }
+.tri-inline-form { display: inline; }
+.tri-form input, .tri-form select, .tri-form textarea {
   display: block; width: 100%; margin-bottom: 10px; padding: 8px 10px;
-  background: #0b1120; color: var(--tri-text); border: 1px solid var(--tri-border); border-radius: 6px;
+  background: var(--tri-bg); color: var(--tri-text); border: 1px solid var(--tri-border); border-radius: 6px;
+  font-family: inherit; font-size: 0.9rem;
 }
-.tri-form label { font-size: 0.85rem; color: var(--tri-muted); }
-.tri-empty { color: var(--tri-muted); font-style: italic; }
+.tri-form textarea { min-height: 70px; resize: vertical; }
+.tri-form label { font-size: 0.82rem; color: var(--tri-muted); display: block; margin-bottom: 3px; }
+.tri-form-row { display: flex; gap: 10px; }
+.tri-form-row > * { flex: 1; }
+.tri-form-check { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tri-form-check input { width: auto; margin: 0; }
+/* Checkboxes/radios must never inherit the block/100%-width rule above --
+   otherwise the browser stretches the box itself into a large rectangle
+   instead of leaving it at its normal small size. */
+.tri-form input[type="checkbox"], .tri-form input[type="radio"] { display: inline-block; width: auto; }
+.tri-empty { color: var(--tri-muted); font-style: italic; padding: 8px 0; }
 .tri-login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-.tri-error { color: #f87171; margin-bottom: 10px; }
+.tri-error { color: var(--tri-danger); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.tri-notice { color: var(--tri-accent); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; font-size: 0.88rem; }
+.tri-flash {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px;
+  margin-bottom: 16px; font-size: 0.9rem;
+}
+.tri-flash-success { background: rgba(22,163,74,0.1); color: var(--tri-success); border: 1px solid rgba(22,163,74,0.3); }
+.tri-flash-error { background: rgba(209,56,63,0.1); color: var(--tri-danger); border: 1px solid rgba(209,56,63,0.3); }
+.tri-fields-builder { border: 1px solid var(--tri-border); border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+.tri-field-row {
+  display: grid; grid-template-columns: 1.2fr 1.2fr 1fr 1fr 0.6fr 1.4fr auto;
+  gap: 8px; align-items: start; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--tri-border);
+}
+.tri-field-row input, .tri-field-row select { margin-bottom: 0; }
+.tri-field-row .tri-field-extra { display: none; }
+.tri-field-row .tri-field-extra.show { display: block; }
+.tri-field-row .tri-field-check { display: flex; flex-direction: column; }
+.tri-field-row .tri-field-check input[type="checkbox"] {
+  margin-top: 8px; width: 18px; height: 18px;
+}
+.tri-details { margin-top: 6px; }
+.tri-details summary { cursor: pointer; color: var(--tri-muted); font-size: 0.85rem; }
+.tri-token-reveal {
+  background: var(--tri-bg-subtle); border: 1px dashed var(--tri-accent); border-radius: 8px; padding: 10px;
+  font-family: monospace; word-break: break-all; margin-bottom: 12px;
+}
+.tri-checkbox-list { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.tri-checkbox-list label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--tri-text); }
+.tri-checkbox-list input { width: auto; margin: 0; }
+.tri-quill-mount { background: var(--tri-bg); margin-bottom: 10px; }
+.tri-quill-mount .ql-editor { min-height: 160px; font-size: 0.9rem; }
+.tri-richtext-md + .EasyMDEContainer { margin-bottom: 10px; }
+.EasyMDEContainer .CodeMirror { min-height: 160px; }
+
+/* Interactive API console + quick-reference tables (Tokens page). */
+.tri-api-console-response {
+  margin-top: 12px; border: 1px solid var(--tri-border); border-radius: 8px; overflow: hidden;
+}
+.tri-api-console-status {
+  padding: 6px 10px; font-size: 0.82rem; font-weight: 600; background: var(--tri-bg-subtle); color: var(--tri-text);
+}
+.tri-api-console-status-ok { color: var(--tri-success); }
+.tri-api-console-status-error { color: var(--tri-danger); }
+.tri-api-console-body {
+  margin: 0; padding: 10px; font-family: monospace; font-size: 0.82rem; white-space: pre-wrap;
+  word-break: break-word; max-height: 320px; overflow: auto;
+}
+.tri-api-doc-table { margin-bottom: 4px; }
+.tri-api-doc-table td { font-size: 0.85rem; vertical-align: middle; }
+.tri-api-doc-row { cursor: pointer; }
+.tri-api-doc-row:hover { background: var(--tri-bg-subtle); }
+.tri-method-get { background: var(--tri-accent); }
+.tri-method-post { background: var(--tri-success); }
+.tri-method-put { background: #b5820a; }
+.tri-method-delete { background: var(--tri-danger); }
+
+/* Media upload progress bar */
+.tri-upload-progress { display: none; align-items: center; gap: 10px; margin: 4px 0 12px; }
+.tri-upload-progress.show { display: flex; }
+.tri-upload-progress-track {
+  flex: 1; height: 8px; border-radius: 999px; background: var(--tri-bg-subtle);
+  border: 1px solid var(--tri-border); overflow: hidden;
+}
+.tri-upload-progress-fill { height: 100%; width: 0%; background: var(--tri-accent); transition: width 0.15s ease; }
+.tri-upload-progress-label { font-size: 0.8rem; color: var(--tri-muted); white-space: nowrap; }
+
+/* Media grid with previews */
+.tri-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+.tri-media-card {
+  border: 1px solid var(--tri-border); border-radius: 10px; overflow: hidden;
+  background: var(--tri-card); display: flex; flex-direction: column; position: relative;
+}
+.tri-media-preview {
+  display: flex; align-items: center; justify-content: center; height: 120px;
+  background: var(--tri-bg-subtle); color: var(--tri-muted);
+}
+.tri-media-preview img, .tri-media-preview video { width: 100%; height: 100%; object-fit: cover; }
+.tri-media-preview .material-icons { font-size: 40px; }
+.tri-media-meta { padding: 8px 10px; }
+.tri-media-name { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tri-media-sub { font-size: 0.76rem; color: var(--tri-muted); margin-top: 2px; }
+.tri-media-card > .tri-inline-form { position: absolute; top: 6px; right: 6px; }
+.tri-media-card > .tri-inline-form .tri-icon-btn { background: rgba(255,255,255,0.9); margin-left: 0; }
+
+/* Media picker: the content-form control for Media fields, replacing a
+   bare <select> (indistinguishable filenames) with a thumbnail chip strip
+   plus a modal grid of every media in the project. */
+.tri-media-picker-preview { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.tri-media-picker-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 4px;
+  background: var(--tri-bg-subtle); border: 1px solid var(--tri-border); border-radius: 999px;
+  font-size: 0.82rem; max-width: 220px;
+}
+.tri-media-picker-chip-thumb {
+  width: 26px; height: 26px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; background: var(--tri-card); color: var(--tri-muted);
+}
+.tri-media-picker-chip-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.tri-media-picker-chip-thumb .material-icons { font-size: 15px; }
+.tri-media-picker-chip-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tri-media-picker-remove {
+  background: transparent; border: none; color: var(--tri-muted); cursor: pointer;
+  display: inline-flex; padding: 2px; border-radius: 999px; font-size: 14px; line-height: 1;
+}
+.tri-media-picker-remove:hover { color: var(--tri-danger); background: rgba(209,56,63,0.1); }
+.tri-media-picker-modal {
+  position: fixed; inset: 0; background: rgba(29,31,37,0.45);
+  align-items: center; justify-content: center; z-index: 200; padding: 20px;
+}
+.tri-media-picker-modal:not([hidden]) { display: flex; }
+.tri-media-picker-modal-inner {
+  background: var(--tri-card); border-radius: 10px; padding: 16px; width: 100%; max-width: 720px;
+  max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(29,31,37,0.3);
+}
+.tri-media-picker-modal-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.tri-media-picker-modal-header .tri-media-picker-filter {
+  flex: 1; padding: 8px 10px; border: 1px solid var(--tri-border); border-radius: 6px;
+  font-family: inherit; font-size: 0.9rem;
+}
+.tri-media-picker-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;
+  overflow-y: auto; padding: 2px;
+}
+.tri-media-picker-item {
+  border: 2px solid var(--tri-border); border-radius: 8px; background: var(--tri-bg); cursor: pointer;
+  padding: 0; overflow: hidden; text-align: left; font-family: inherit;
+}
+.tri-media-picker-item:hover { border-color: var(--tri-accent); }
+.tri-media-picker-item.selected { border-color: var(--tri-accent); box-shadow: 0 0 0 1px var(--tri-accent); }
+.tri-media-picker-item-preview {
+  display: flex; align-items: center; justify-content: center; height: 80px;
+  background: var(--tri-bg-subtle); color: var(--tri-muted);
+}
+.tri-media-picker-item-preview img, .tri-media-picker-item-preview video { width: 100%; height: 100%; object-fit: cover; }
+.tri-media-picker-item-preview .material-icons { font-size: 32px; }
+.tri-media-picker-item-label {
+  display: block; padding: 6px 8px; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Content grid: clicking a row opens it in the edit modal below, replacing
+   the old per-row action icons entirely. */
+.tri-row-clickable { cursor: pointer; }
+.tri-row-clickable:hover { background: var(--tri-bg-subtle); }
+.tri-content-modal {
+  position: fixed; inset: 0; background: rgba(29,31,37,0.45);
+  align-items: center; justify-content: center; z-index: 150; padding: 20px;
+}
+.tri-content-modal:not([hidden]) { display: flex; }
+.tri-content-modal-inner {
+  background: var(--tri-card); border-radius: 10px; padding: 18px; width: 100%; max-width: 640px;
+  max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(29,31,37,0.3);
+}
+.tri-content-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tri-content-modal-header h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.05rem; }
+.tri-content-modal-body { overflow-y: auto; padding: 2px; }
+.tri-content-modal-body .tri-card { border: none; padding: 0; background: transparent; }
+.tri-content-modal-body .tri-card > h3 { display: none; } /* modal header already shows the title */
+.tri-content-modal-footer {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--tri-border);
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+}
+.tri-content-modal-force { font-size: 0.78rem; color: var(--tri-muted); }
+
+/* Keyboard focus: a visible, consistent ring everywhere instead of relying
+   on (or losing) the browser default. */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--tri-accent); outline-offset: 2px; border-radius: 4px;
+}
+
+/* Generic "submitting…" state applied to any submit button by app.js. */
+.tri-btn-loading { position: relative; color: transparent !important; pointer-events: none; }
+.tri-btn-loading::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px;
+  margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5);
+  border-top-color: #fff; animation: tri-spin 0.6s linear infinite;
+}
+.tri-btn-ghost.tri-btn-loading::after, .tri-btn-danger.tri-btn-loading::after {
+  border: 2px solid rgba(29,31,37,0.25); border-top-color: var(--tri-text);
+}
+@keyframes tri-spin { to { transform: rotate(360deg); } }
+
+/* Confirmation modal, replacing native confirm()/prompt() (see app.js). */
+.tri-modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(29,31,37,0.45);
+  align-items: center; justify-content: center; z-index: 100; padding: 16px;
+}
+.tri-modal-overlay.show { display: flex; }
+.tri-modal {
+  background: var(--tri-card); border-radius: 10px; padding: 20px; max-width: 400px; width: 100%;
+  box-shadow: 0 20px 50px rgba(29,31,37,0.3);
+}
+.tri-modal h3 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; font-size: 1.05rem; color: var(--tri-danger); }
+.tri-modal-message { margin: 0 0 6px; font-size: 0.92rem; white-space: pre-line; }
+.tri-modal-name-wrap { margin-top: 10px; }
+.tri-modal-name-wrap label { font-size: 0.82rem; color: var(--tri-muted); display: block; margin-bottom: 4px; }
+.tri-modal-name-wrap input {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--tri-border); border-radius: 6px;
+  font-family: inherit; font-size: 0.9rem;
+}
+.tri-modal-name-error { color: var(--tri-danger); font-size: 0.8rem; margin: 6px 0 0; }
+.tri-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* Content-grid client-side search box. */
+.tri-table-filter { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; max-width: 320px; }
+.tri-table-filter input {
+  width: 100%; padding: 7px 10px; border: 1px solid var(--tri-border); border-radius: 6px;
+  font-family: inherit; font-size: 0.88rem;
+}
+
+/* Standalone error pages (404 / 500), styled to stay in the app's identity
+   instead of a bare browser error text. */
+.tri-error-page {
+  display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px;
+}
+.tri-error-page .tri-card { max-width: 420px; text-align: center; }
+.tri-error-page .material-icons { font-size: 40px; color: var(--tri-muted); }
+
+/* Tables scroll horizontally on narrow viewports instead of overflowing the
+   page or losing column alignment (see .tri-table-scroll wrapper). */
+.tri-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tri-table-scroll table.tri-table { min-width: 480px; }
+
+@media (max-width: 720px) {
+  .tri-topbar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .tri-breadcrumb { flex-wrap: wrap; }
+  .tri-content { padding: 14px; }
+  .tri-form-row { flex-direction: column; gap: 0; }
+  .tri-media-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .tri-crumb-dropdown { left: auto; right: 0; }
+  .tri-table-filter { max-width: none; }
+}

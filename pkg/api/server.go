@@ -28,9 +28,23 @@ type Server struct {
 	// production, os.DirFS in tests. Nil is fine when Templates is nil.
 	StaticFS fs.FS
 
+	// MaxUploadSize caps a single media upload's total size in bytes.
+	// Defaults to defaultMaxUploadSize; overridable (e.g. from an env var)
+	// so large-file support doesn't require a code change.
+	MaxUploadSize int64
+
 	mu         sync.Mutex
 	projectDBs map[string]*storage.ProjectDB
 }
+
+// defaultMaxUploadSize is used when Server.MaxUploadSize is left unset.
+const defaultMaxUploadSize = 500 << 20 // 500 MiB
+
+// multipartMemoryThreshold caps how much of an upload multipart.Reader keeps
+// buffered in RAM; anything beyond this is spilled to a temp file on disk by
+// the standard library automatically. Keeping this small (independent of
+// MaxUploadSize) is what lets large uploads not blow up server memory.
+const multipartMemoryThreshold = 16 << 20 // 16 MiB
 
 // NewServer wires a Server. templates may be nil (HTMX routes will then be
 // unavailable, e.g. in tests that only exercise the JSON API).
@@ -42,6 +56,7 @@ func NewServer(system *storage.SystemDB, manager *storage.Manager, issuer *auth.
 		Dispatcher:        dispatcher,
 		Templates:         templates,
 		SessionCookieName: "tricms_session",
+		MaxUploadSize:     defaultMaxUploadSize,
 		projectDBs:        make(map[string]*storage.ProjectDB),
 	}
 }

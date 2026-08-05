@@ -11,18 +11,24 @@ import (
 func TestLogs_LimitParam(t *testing.T) {
 	e := newTestEnv(t)
 	admin := e.createUser("lg1@x.com", true)
-	for i := 0; i < 3; i++ {
-		e.request(http.MethodPost, "/api/v1/projects", admin, createProjectRequest{Name: "P"})
+	p := e.createProject("LogsLimit")
+
+	// Generate several log entries scoped to the same project.
+	for _, email := range []string{"lg-t1@x.com", "lg-t2@x.com", "lg-t3@x.com"} {
+		target := e.createUser(email, false)
+		e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/users", admin, assignProjectUserRequest{
+			Email: target.Email, Role: storage.RoleRedacteur,
+		})
 	}
 
-	rec := e.request(http.MethodGet, "/api/v1/logs?limit=1", admin, nil)
+	rec := e.request(http.MethodGet, "/api/v1/projects/"+p.ID+"/logs?limit=1", admin, nil)
 	logs := decodeBody[[]storage.GlobalLog](t, rec)
 	if len(logs) != 1 {
 		t.Fatalf("expected limit=1 to return exactly 1 log, got %d", len(logs))
 	}
 
 	// Invalid limit falls back to the default rather than erroring.
-	rec = e.request(http.MethodGet, "/api/v1/logs?limit=notanumber", admin, nil)
+	rec = e.request(http.MethodGet, "/api/v1/projects/"+p.ID+"/logs?limit=notanumber", admin, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 with invalid limit ignored, got %d", rec.Code)
 	}

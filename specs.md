@@ -48,7 +48,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE projects (
-    id TEXT PRIMARY KEY, -- Ex: "proj_actimium"
+    id TEXT PRIMARY KEY, -- Ex: "projAAA"
     name TEXT NOT NULL,
     folder_path TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP

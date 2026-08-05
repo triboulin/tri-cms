@@ -102,24 +102,50 @@ func TestWebhooks_AdminOnlyCRUD(t *testing.T) {
 	}
 }
 
-func TestGlobalLogs_AdminOnly(t *testing.T) {
+// TestProjectLogs_AdminOnly guards the audit log being scoped to one
+// project (not a cross-project, global list) while staying admin-only, per
+// GET /api/v1/projects/{projectID}/logs (mirrors Tokens/Webhooks).
+func TestProjectLogs_AdminOnly(t *testing.T) {
 	e := newTestEnv(t)
 	admin := e.createUser("l1@x.com", true)
 	regular := e.createUser("l2@x.com", false)
+	p := e.createProject("Logged")
+	e.setRole(regular.ID, p.ID, storage.RoleConcepteur)
 
-	rec := e.request(http.MethodGet, "/api/v1/logs", regular, nil)
+	// Even a CONCEPTEUR on the project cannot see its audit log.
+	rec := e.request(http.MethodGet, "/api/v1/projects/"+p.ID+"/logs", regular, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", rec.Code)
 	}
 
-	e.request(http.MethodPost, "/api/v1/projects", admin, createProjectRequest{Name: "Logged"})
+	// Any project-scoped action recorded against p.ID should show up here.
+	target := e.createUser("l3@x.com", false)
+	e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/users", admin, assignProjectUserRequest{
+		Email: target.Email, Role: storage.RoleRedacteur,
+	})
 
-	rec = e.request(http.MethodGet, "/api/v1/logs", admin, nil)
+	rec = e.request(http.MethodGet, "/api/v1/projects/"+p.ID+"/logs", admin, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	logs := decodeBody[[]storage.GlobalLog](t, rec)
 	if len(logs) == 0 {
-		t.Fatal("expected at least one log entry (project.create)")
+		t.Fatal("expected at least one log entry (project_permission.set)")
+	}
+	for _, l := range logs {
+		if l.ProjectID != p.ID {
+			t.Fatalf("expected all logs scoped to project %s, got %+v", p.ID, l)
+		}
+	}
+
+	// A second, unrelated project must not see this project's log entries.
+	other := e.createProject("Other")
+	rec = e.request(http.MethodGet, "/api/v1/projects/"+other.ID+"/logs", admin, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	otherLogs := decodeBody[[]storage.GlobalLog](t, rec)
+	if len(otherLogs) != 0 {
+		t.Fatalf("expected no log entries leaked into unrelated project, got %+v", otherLogs)
 	}
 }

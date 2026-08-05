@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -134,6 +135,20 @@ func (e *testEnv) requestWithToken(method, path, token string, body any) *httpte
 	req := httptest.NewRequest(method, path, reader)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	e.router.ServeHTTP(rec, req)
+	return rec
+}
+
+// postForm performs an application/x-www-form-urlencoded POST, exactly as
+// every HTMX admin-UI <form> does (see pkg/api/htmx*.go).
+func (e *testEnv) postForm(path string, u *storage.User, values url.Values) *httptest.ResponseRecorder {
+	e.t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(values.Encode())))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if u != nil {
+		req.AddCookie(e.sessionCookie(u))
+	}
 	rec := httptest.NewRecorder()
 	e.router.ServeHTTP(rec, req)
 	return rec

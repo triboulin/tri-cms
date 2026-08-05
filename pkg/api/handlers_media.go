@@ -12,8 +12,6 @@ import (
 	"tricms/pkg/storage"
 )
 
-const maxMediaUploadSize = 25 << 20 // 25 MiB
-
 // handleListMedias lists every media asset of the in-scope project.
 // Available to any project role.
 func (s *Server) handleListMedias(w http.ResponseWriter, r *http.Request) {
@@ -38,8 +36,8 @@ func (s *Server) handleListMedias(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 	project := ProjectFromContext(r.Context())
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxMediaUploadSize)
-	if err := r.ParseMultipartForm(maxMediaUploadSize); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, s.MaxUploadSize)
+	if err := r.ParseMultipartForm(multipartMemoryThreshold); err != nil {
 		writeError(w, http.StatusBadRequest, "file too large or malformed upload")
 		return
 	}

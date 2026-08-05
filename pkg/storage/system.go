@@ -502,6 +502,31 @@ func (s *SystemDB) ListLogs(ctx context.Context, limit int) ([]*GlobalLog, error
 	return out, rows.Err()
 }
 
+// ListLogsByProject returns the audit trail for a single project (most
+// recent first), instead of the whole installation -- the audit log view is
+// project-scoped (still admin-only), not a cross-project firehose.
+func (s *SystemDB) ListLogsByProject(ctx context.Context, projectID string, limit int) ([]*GlobalLog, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, COALESCE(user_id, ''), COALESCE(project_id, ''), action, COALESCE(details, ''), created_at
+		 FROM global_logs WHERE project_id = ? ORDER BY id DESC LIMIT ?`, projectID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*GlobalLog
+	for rows.Next() {
+		var l GlobalLog
+		if err := rows.Scan(&l.ID, &l.UserID, &l.ProjectID, &l.Action, &l.Details, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &l)
+	}
+	return out, rows.Err()
+}
+
 // ---- helpers ----
 
 func nullable(s string) any {

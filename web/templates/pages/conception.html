@@ -1,0 +1,71 @@
+{{define "page:conception"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      {{template "partial:flash" .}}
+
+      <div class="tri-section-title">
+        <h2><span class="material-icons" aria-hidden="true">schema</span> Schémas de contenu</h2>
+      </div>
+      {{if not .Content.Schemas}}
+        <p class="tri-empty">Aucun schéma pour ce projet.</p>
+      {{else}}
+        <div class="tri-table-scroll">
+        <table class="tri-table">
+          <thead><tr><th>Nom</th><th>Slug</th><th></th></tr></thead>
+          <tbody>
+          {{range .Content.Schemas}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td><code>{{.Slug}}</code></td>
+              <td class="tri-actions">
+                <a class="tri-icon-btn" title="Voir les contenus" href="/projects/{{$.CurrentProject.ID}}/schemas/{{.Slug}}/contents" aria-label="Voir les contenus"><span class="material-icons" aria-hidden="true">table_rows</span></a>
+                <a class="tri-icon-btn" title="Modifier" href="/projects/{{$.CurrentProject.ID}}/schemas/{{.Slug}}/edit" aria-label="Modifier"><span class="material-icons" aria-hidden="true">edit</span></a>
+                <form class="tri-inline-form" method="post" action="/projects/{{$.CurrentProject.ID}}/schemas/{{.Slug}}/delete"
+                      data-confirm="Supprimer le schéma « {{.Name}} » et tous ses contenus ? Cette action est irréversible.">
+                  <button type="submit" class="tri-icon-btn danger" title="Supprimer" aria-label="Supprimer"><span class="material-icons" aria-hidden="true">delete</span></button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+        </div>
+      {{end}}
+
+      <div class="tri-card" id="create-schema">
+        <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau schéma</h3>
+        <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/schemas/create">
+          <div class="tri-form-row">
+            <div>
+              <label>Slug (immuable, utilisé dans les URLs d'API)</label>
+              <input type="text" name="slug" value="{{.Content.NewSchemaSlug}}" placeholder="ex: article" pattern="[a-z0-9_-]+" required>
+            </div>
+            <div>
+              <label>Nom</label>
+              <input type="text" name="name" value="{{.Content.NewSchemaName}}" placeholder="ex: Article" required>
+            </div>
+          </div>
+
+          <label style="margin-top:10px;">Champs</label>
+          <div id="fields-builder" class="tri-fields-builder" data-next-index="{{len .Content.NewFieldRowCtxs}}">
+            {{range .Content.NewFieldRowCtxs}}{{template "partial:field_row" .}}{{end}}
+          </div>
+          <button type="button" class="tri-btn tri-btn-sm tri-btn-ghost" onclick="triAddFieldRow()"><span class="material-icons" aria-hidden="true">add</span> Ajouter un champ</button>
+
+          <div style="margin-top:14px;">
+            <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Créer le schéma</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+<script>window.triAvailableSchemas = [{{range .Content.AvailableSchemas}}"{{.}}",{{end}}];</script>
+<script src="/static/js/field-builder.js"></script>
+</body>
+</html>
+{{end}}

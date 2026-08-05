@@ -1,0 +1,60 @@
+{{define "page:webhooks"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      {{template "partial:flash" .}}
+
+      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">webhook</span> Webhooks</h2></div>
+      {{if not .Content.Webhooks}}
+        <p class="tri-empty">Aucun webhook configuré pour ce projet.</p>
+      {{else}}
+        {{range .Content.Webhooks}}
+        <div class="tri-card">
+          <form class="tri-form" method="post" action="/projects/{{$.CurrentProject.ID}}/webhooks/{{.Webhook.ID}}/update">
+            <div class="tri-form-row">
+              <div><label>URL</label><input type="url" name="url" value="{{.Webhook.URL}}" required></div>
+              <div><label>Secret</label><input type="text" name="secret" value="{{.Webhook.Secret}}" required></div>
+            </div>
+            <label>Évènements</label>
+            <div class="tri-checkbox-list">
+              {{range .Events}}
+                <label><input type="checkbox" name="events" value="{{.Value}}" {{if .Selected}}checked{{end}}> {{.Value}}</label>
+              {{end}}
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="tri-btn tri-btn-sm" type="submit"><span class="material-icons" aria-hidden="true">save</span> Enregistrer</button>
+            </div>
+          </form>
+          <form class="tri-inline-form" method="post" action="/projects/{{$.CurrentProject.ID}}/webhooks/{{.Webhook.ID}}/delete"
+                data-confirm="Supprimer ce webhook ?" style="margin-top:8px;">
+            <button type="submit" class="tri-btn tri-btn-sm tri-btn-danger"><span class="material-icons" aria-hidden="true">delete</span> Supprimer</button>
+          </form>
+        </div>
+        {{end}}
+      {{end}}
+
+      <div class="tri-card" id="create">
+        <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau webhook</h3>
+        <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/webhooks/create">
+          <div class="tri-form-row">
+            <div><label>URL</label><input type="url" name="url" placeholder="https://example.com/hook" required></div>
+            <div><label>Secret</label><input type="text" name="secret" placeholder="secret partagé (HMAC)" required></div>
+          </div>
+          <label>Évènements</label>
+          <div class="tri-checkbox-list">
+            {{range .Content.NewEventOptions}}
+              <label><input type="checkbox" name="events" value="{{.Value}}"> {{.Value}}</label>
+            {{end}}
+          </div>
+          <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Créer</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+{{end}}

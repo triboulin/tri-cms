@@ -5,14 +5,15 @@
 <body>
   <div class="tri-login-wrap">
     <div class="tri-card" style="width:320px;">
-      <h2 style="margin-top:0;">triCMS</h2>
-      {{if .Content.Error}}<div class="tri-error">{{.Content.Error}}</div>{{end}}
+      <h2 style="margin-top:0; display:flex; align-items:center; gap:8px;"><span class="material-icons" aria-hidden="true">hub</span> triCMS</h2>
+      {{if .Content.Error}}<div class="tri-error"><span class="material-icons" aria-hidden="true">error</span> {{.Content.Error}}</div>{{end}}
+      {{if .Content.Notice}}<div class="tri-notice"><span class="material-icons" aria-hidden="true">info</span> {{.Content.Notice}}</div>{{end}}
       <form class="tri-form" method="post" action="/login">
         <label>Email</label>
         <input type="email" name="email" required>
         <label>Mot de passe</label>
         <input type="password" name="password" required>
-        <button class="tri-btn" type="submit">Se connecter</button>
+        <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">login</span> Se connecter</button>
       </form>
     </div>
   </div>

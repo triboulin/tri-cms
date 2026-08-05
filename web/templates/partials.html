@@ -4,57 +4,155 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>triCMS</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/1.9.12/htmx.min.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
   <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/app.js" defer></script>
 </head>
 {{end}}
 
-{{define "partial:breadcrumb"}}
-<div class="tri-breadcrumb">
-  {{if .CurrentProject}}
-    <a href="/projects/{{.CurrentProject.ID}}">{{.CurrentProject.Name}}</a>
-  {{else}}
-    <a href="/admin">Administration</a>
-  {{end}}
-  &nbsp;›&nbsp; <strong>{{.PageTitle}}</strong>
+{{define "partial:flash"}}
+{{if .Flash}}
+<div class="tri-flash tri-flash-{{.FlashKind}}">
+  <span class="material-icons" aria-hidden="true">{{if eq .FlashKind "error"}}error{{else}}check_circle{{end}}</span>
+  <span>{{.Flash}}</span>
 </div>
 {{end}}
-
-{{define "partial:project_selector"}}
-{{if gt (len .Projects) 1}}
-<form class="tri-project-select" method="get" action="/projects/redirect">
-  <select name="project_id" onchange="window.location='/projects/'+this.value">
-    {{range .Projects}}
-      <option value="{{.ID}}" {{if $.CurrentProject}}{{if eq $.CurrentProject.ID .ID}}selected{{end}}{{end}}>{{.Name}}</option>
-    {{end}}
-  </select>
-</form>
-{{end}}
 {{end}}
 
-{{define "partial:sidebar"}}
-<div class="tri-sidebar">
-  <div class="brand">triCMS</div>
-  <nav>
+{{/*
+  Breadcrumb with hover dropdowns, replacing the old sidebar entirely:
+  - Level 1 (root crumb): current project name, or "Administration" when in
+    the admin area, or nothing extra on the dashboard. Hovering it lists every
+    other top-level destination: switch project, "+ Nouveau projet" (if
+    admin), and "Administration" (if admin).
+  - Level 2 (section crumb): current section (Conception/Collections/
+    Médias/Utilisateurs/API/Webhooks, or the admin tabs). Hovering it lists
+    sibling sections at that level, filtered by what the user can access.
+  - Level 3 (leaf): optional trailing detail (e.g. a schema name), plain text.
+*/}}
+{{define "partial:breadcrumb"}}
+<div class="tri-breadcrumb">
+  <span class="material-icons tri-crumb-icon" aria-hidden="true">home</span>
+  <a href="/">triCMS</a>
+
+  <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
+  <div class="tri-crumb tri-crumb-hover">
     {{if .CurrentProject}}
-      {{if .Sidebar.Conception}}<a href="/projects/{{.CurrentProject.ID}}/conception">Conception</a>{{end}}
-      {{if .Sidebar.Collections}}<a href="/projects/{{.CurrentProject.ID}}">Collections</a>{{end}}
-      {{if .Sidebar.Medias}}<a href="/projects/{{.CurrentProject.ID}}/medias">Médias</a>{{end}}
-      {{if .Sidebar.Users}}<a href="/projects/{{.CurrentProject.ID}}/users">Utilisateurs</a>{{end}}
-      {{if .Sidebar.API}}<a href="/projects/{{.CurrentProject.ID}}/tokens">API</a>{{end}}
-      {{if .Sidebar.Webhooks}}<a href="/projects/{{.CurrentProject.ID}}/webhooks">Webhooks</a>{{end}}
+      <a href="/projects/{{.CurrentProject.ID}}"><span class="material-icons tri-crumb-icon" aria-hidden="true">folder_open</span> {{.CurrentProject.Name}}</a>
+    {{else if .IsAdmin}}
+      <a href="/admin/projects"><span class="material-icons tri-crumb-icon" aria-hidden="true">admin_panel_settings</span> Administration</a>
+    {{else}}
+      <span><span class="material-icons tri-crumb-icon" aria-hidden="true">table_view</span> Mes projets</span>
     {{end}}
-    {{if .User.IsGlobalAdmin}}
-      <a href="/admin/projects">Administration</a>
-      {{if .Sidebar.Logs}}<a href="/admin/logs">Logs</a>{{end}}
-    {{end}}
-    <a href="/logout">Déconnexion</a>
-  </nav>
+    <span class="material-icons tri-crumb-caret" aria-hidden="true">expand_more</span>
+    <div class="tri-crumb-dropdown">
+      {{range .Projects}}
+        {{if and $.CurrentProject (eq $.CurrentProject.ID .ID)}}
+        <a class="active" href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">folder_open</span> {{.Name}}</a>
+        {{else}}
+        <a href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">folder</span> {{.Name}}</a>
+        {{end}}
+      {{end}}
+      {{if .User.IsGlobalAdmin}}
+      {{if .Projects}}<div class="tri-crumb-dropdown-sep"></div>{{end}}
+      <a href="/#create"><span class="material-icons" aria-hidden="true">add</span> Nouveau projet</a>
+      <a href="/admin/projects" class="{{if .IsAdmin}}active{{end}}"><span class="material-icons" aria-hidden="true">admin_panel_settings</span> Administration</a>
+      {{end}}
+    </div>
+  </div>
+
+  {{if .Sections}}
+  <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
+  <div class="tri-crumb tri-crumb-hover">
+    {{if .Leaf}}<a href="{{.SectionURL}}">{{else}}<strong>{{end}}
+      <span class="material-icons tri-crumb-icon" aria-hidden="true">{{.SectionIcon}}</span> {{.SectionLabel}}
+    {{if .Leaf}}</a>{{else}}</strong>{{end}}
+    <span class="material-icons tri-crumb-caret" aria-hidden="true">expand_more</span>
+    <div class="tri-crumb-dropdown">
+      {{range .Sections}}
+      <a href="{{.URL}}" class="{{if .Active}}active{{end}}"><span class="material-icons" aria-hidden="true">{{.Icon}}</span> {{.Label}}</a>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+
+  {{if .Leaf}}
+  <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
+  <strong>{{.Leaf}}</strong>
+  {{end}}
 </div>
 {{end}}
 
 {{define "partial:topbar"}}
 <div class="tri-topbar">
   {{template "partial:breadcrumb" .}}
-  {{template "partial:project_selector" .}}
+  <div class="tri-topbar-actions">
+    <span class="tri-user-email">{{.User.Email}}</span>
+    <a class="tri-icon-btn" title="Déconnexion" href="/logout" aria-label="Déconnexion"><span class="material-icons" aria-hidden="true">logout</span></a>
+  </div>
+</div>
+{{end}}
+
+{{define "page:error"}}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>triCMS</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div class="tri-error-page">
+    <div class="tri-card">
+      <span class="material-icons" aria-hidden="true">error_outline</span>
+      <h2>{{.Title}}</h2>
+      <p class="tri-empty">{{.Message}}</p>
+      <a class="tri-btn" href="/"><span class="material-icons" aria-hidden="true">home</span> Retour à l'accueil</a>
+    </div>
+  </div>
+</body>
+</html>
+{{end}}
+
+{{define "partial:field_row"}}
+<div class="tri-field-row" data-index="{{.Row.Index}}">
+  <div><label>Clé</label><input name="fields[{{.Row.Index}}][key]" value="{{.Row.Key}}" placeholder="ex: title" required></div>
+  <div><label>Libellé</label><input name="fields[{{.Row.Index}}][label]" value="{{.Row.Label}}" placeholder="Titre"></div>
+  <div>
+    <label>Type</label>
+    <select name="fields[{{.Row.Index}}][type]" onchange="triToggleFieldExtra(this)">
+      {{$rowType := .Row.Type}}
+      {{range .TypeOptions}}<option value="{{.}}" {{if eq $rowType .}}selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </div>
+  <div>
+    <label>Cardinalité</label>
+    <select name="fields[{{.Row.Index}}][cardinality]">
+      <option value="Simple" {{if ne .Row.Cardinality "Collection"}}selected{{end}}>Simple</option>
+      <option value="Collection" {{if eq .Row.Cardinality "Collection"}}selected{{end}}>Collection</option>
+    </select>
+  </div>
+  <div class="tri-field-check"><label>Requis</label><input type="checkbox" name="fields[{{.Row.Index}}][required]" value="true" {{if .Row.Required}}checked{{end}}></div>
+  <div>
+    <div class="tri-field-extra {{if eq .Row.Type "Enum"}}show{{end}}" data-role="options">
+      <label>Options (Enum, séparées par virgules)</label>
+      <input name="fields[{{.Row.Index}}][options]" value="{{.Row.OptionsCSV}}" placeholder="draft,review,approved">
+    </div>
+    <div class="tri-field-extra {{if eq .Row.Type "Reference"}}show{{end}}" data-role="target">
+      <label>Schéma cible (Reference)</label>
+      <select name="fields[{{.Row.Index}}][targetSchema]">
+        <option value="">(choisir un schéma)</option>
+        {{$target := .Row.TargetSchema}}
+        {{range .AvailableSchemas}}<option value="{{.}}" {{if eq $target .}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </div>
+    <div class="tri-field-extra show" data-role="placeholder">
+      <label>Placeholder</label>
+      <input name="fields[{{.Row.Index}}][placeholder]" value="{{.Row.Placeholder}}">
+    </div>
+  </div>
+  <div><button type="button" class="tri-icon-btn danger" title="Supprimer ce champ" onclick="this.closest('.tri-field-row').remove()" aria-label="Supprimer ce champ"><span class="material-icons" aria-hidden="true">delete</span></button></div>
 </div>
 {{end}}

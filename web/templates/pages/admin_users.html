@@ -3,23 +3,56 @@
 <html lang="fr">
 {{template "partial:head" .}}
 <body>
-<div class="tri-app">
-  {{template "partial:sidebar" .}}
-  <div class="tri-main">
+<div class="tri-main">
     {{template "partial:topbar" .}}
     <div class="tri-content">
-      <h2>Comptes globaux</h2>
+      {{template "partial:flash" .}}
+
+      <div class="tri-card" id="create">
+        <h3><span class="material-icons" aria-hidden="true">person_add</span> Nouveau compte</h3>
+        <form class="tri-form" method="post" action="/admin/users/create">
+          <div class="tri-form-row">
+            <div>
+              <label>Email</label>
+              <input type="email" name="email" required>
+            </div>
+            <div>
+              <label>Mot de passe</label>
+              <input type="password" name="password" required>
+            </div>
+          </div>
+          <div class="tri-form-check">
+            <input type="checkbox" name="is_global_admin" value="true" id="is_admin">
+            <label for="is_admin" style="margin:0;">Administrateur global</label>
+          </div>
+          <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Créer le compte</button>
+        </form>
+      </div>
+
+      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">group</span> Comptes globaux</h2></div>
+      <div class="tri-table-scroll">
       <table class="tri-table">
-        <thead><tr><th>Email</th><th>Admin global</th></tr></thead>
+        <thead><tr><th>Email</th><th>Admin global</th><th></th></tr></thead>
         <tbody>
         {{range .Content.Users}}
-          <tr><td>{{.Email}}</td><td>{{if .IsGlobalAdmin}}<span class="tri-badge">ADMIN</span>{{else}}—{{end}}</td></tr>
+          <tr>
+            <td>{{.Email}}</td>
+            <td>{{if .IsGlobalAdmin}}<span class="tri-badge">ADMIN</span>{{else}}—{{end}}</td>
+            <td class="tri-actions">
+              <form class="tri-inline-form" method="post" action="/admin/users/{{.ID}}/toggle-admin">
+                <button type="submit" class="tri-icon-btn" title="Basculer le statut admin" aria-label="Basculer le statut admin"><span class="material-icons" aria-hidden="true">{{if .IsGlobalAdmin}}remove_moderator{{else}}admin_panel_settings{{end}}</span></button>
+              </form>
+              <form class="tri-inline-form" method="post" action="/admin/users/{{.ID}}/delete" data-confirm="Supprimer le compte {{.Email}} ?">
+                <button type="submit" class="tri-icon-btn danger" title="Supprimer" aria-label="Supprimer"><span class="material-icons" aria-hidden="true">delete</span></button>
+              </form>
+            </td>
+          </tr>
         {{end}}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
-</div>
 </body>
 </html>
 {{end}}

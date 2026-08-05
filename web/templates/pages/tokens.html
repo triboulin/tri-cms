@@ -1,0 +1,130 @@
+{{define "page:tokens"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      {{template "partial:flash" .}}
+
+      {{if .Content.RevealedToken}}
+        <div class="tri-card">
+          <h3><span class="material-icons" aria-hidden="true">vpn_key</span> Token « {{.Content.RevealedName}} » créé</h3>
+          <p class="tri-empty">Copiez-le maintenant : il ne sera plus jamais affiché.</p>
+          <div class="tri-token-reveal">{{.Content.RevealedToken}}</div>
+        </div>
+      {{end}}
+
+      <div class="tri-card">
+        <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau token API</h3>
+        <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/tokens/create">
+          <label>Nom (ex: intégration CI)</label>
+          <input type="text" name="name" required>
+          <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Générer</button>
+        </form>
+      </div>
+
+      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">vpn_key</span> Tokens API</h2></div>
+      {{if not .Content.Tokens}}
+        <p class="tri-empty">Aucun token pour ce projet.</p>
+      {{else}}
+        <div class="tri-table-scroll">
+        <table class="tri-table">
+          <thead><tr><th>Nom</th><th>Créé le</th><th></th></tr></thead>
+          <tbody>
+          {{range .Content.Tokens}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+              <td class="tri-actions">
+                <form class="tri-inline-form" method="post" action="/projects/{{$.CurrentProject.ID}}/tokens/{{.ID}}/delete" data-confirm="Révoquer le token « {{.Name}} » ?">
+                  <button type="submit" class="tri-icon-btn danger" title="Révoquer" aria-label="Révoquer"><span class="material-icons" aria-hidden="true">delete</span></button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+        </div>
+      {{end}}
+
+      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">code</span> Documentation API</h2></div>
+
+      <div class="tri-card">
+        <h3><span class="material-icons" aria-hidden="true">terminal</span> Console interactive</h3>
+        <p class="tri-empty">Cliquez un endpoint ci-dessous pour préremplir la requête, ou modifiez-la librement. Sans jeton renseigné, la requête part avec votre session actuelle. Ceci exécute une vraie requête sur ce projet.</p>
+        <div class="tri-form-row">
+          <div style="flex:0 0 110px;">
+            <label>Méthode</label>
+            <select id="api-console-method">
+              <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+            </select>
+          </div>
+          <div style="flex:3;">
+            <label>Chemin</label>
+            <input type="text" id="api-console-path" value="/api/v1/projects/{{.CurrentProject.ID}}/schemas">
+          </div>
+        </div>
+        <label>Jeton (optionnel — laissez vide pour utiliser votre session)</label>
+        <input type="text" id="api-console-token" placeholder="trk_…" value="{{.Content.RevealedToken}}">
+        <label>Corps JSON (POST / PUT / PATCH)</label>
+        <textarea id="api-console-body" placeholder="{}" style="font-family:monospace; min-height:80px;"></textarea>
+        <button type="button" class="tri-btn tri-btn-sm" id="api-console-send"><span class="material-icons" aria-hidden="true">send</span> Envoyer</button>
+        <div class="tri-api-console-response" id="api-console-response" hidden>
+          <div class="tri-api-console-status"></div>
+          <pre class="tri-api-console-body"></pre>
+        </div>
+      </div>
+
+      <div class="tri-card">
+        <h3><span class="material-icons" aria-hidden="true">menu_book</span> Référence rapide</h3>
+        <p class="tri-empty">Authentification : en-tête <code>Authorization: Bearer &lt;token&gt;</code>, ou cookie de session pour un usage depuis le navigateur. Remplacez <code>{slug}</code> et <code>{id}</code> par de vraies valeurs.</p>
+
+        <details class="tri-details" open>
+          <summary>Schémas &amp; contenus</summary>
+          <table class="tri-table tri-api-doc-table">
+            <tbody>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{{.CurrentProject.ID}}/schemas" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{id}/schemas</code></td><td>Lister les schémas du projet</td></tr>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{{.CurrentProject.ID}}/schemas/{slug}" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{id}/schemas/{slug}</code></td><td>Détail d'un schéma</td></tr>
+              <tr class="tri-api-doc-row" data-method="POST" data-path="/api/v1/projects/{{.CurrentProject.ID}}/schemas" data-body='{"slug":"article","name":"Article","fields":[{"key":"title","label":"Titre","type":"Text","required":true}]}'><td><span class="tri-badge tri-method-post">POST</span></td><td><code>/projects/{id}/schemas</code></td><td>Créer un schéma (CONCEPTEUR+)</td></tr>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{{.CurrentProject.ID}}/contents/{slug}" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{id}/contents/{slug}</code></td><td>Lister les contenus d'un schéma</td></tr>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{{.CurrentProject.ID}}/contents/{slug}/{id}" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{id}/contents/{slug}/{id}</code></td><td>Détail d'un contenu</td></tr>
+              <tr class="tri-api-doc-row" data-method="POST" data-path="/api/v1/projects/{{.CurrentProject.ID}}/contents/{slug}" data-body='{"data":{"title":"Bonjour"},"status":"draft"}'><td><span class="tri-badge tri-method-post">POST</span></td><td><code>/projects/{id}/contents/{slug}</code></td><td>Créer un contenu (REDACTEUR+)</td></tr>
+              <tr class="tri-api-doc-row" data-method="PUT" data-path="/api/v1/projects/{{.CurrentProject.ID}}/contents/{slug}/{id}" data-body='{"data":{"title":"Bonjour, modifié"},"status":"published"}'><td><span class="tri-badge tri-method-put">PUT</span></td><td><code>/projects/{id}/contents/{slug}/{id}</code></td><td>Modifier un contenu (REDACTEUR+)</td></tr>
+              <tr class="tri-api-doc-row" data-method="DELETE" data-path="/api/v1/projects/{{.CurrentProject.ID}}/contents/{slug}/{id}" data-body=""><td><span class="tri-badge tri-method-delete">DELETE</span></td><td><code>/projects/{id}/contents/{slug}/{id}</code></td><td>Supprimer un contenu (REDACTEUR+)</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+        <details class="tri-details">
+          <summary>Médias &amp; utilisateurs</summary>
+          <table class="tri-table tri-api-doc-table">
+            <tbody>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{{.CurrentProject.ID}}/medias" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{id}/medias</code></td><td>Lister les médias</td></tr>
+              <tr><td><span class="tri-badge-outline">POST</span></td><td><code>/projects/{id}/medias</code></td><td>Téléverser un média (multipart/form-data — non testable depuis cette console)</td></tr>
+              <tr class="tri-api-doc-row" data-method="DELETE" data-path="/api/v1/projects/{{.CurrentProject.ID}}/medias/{id}" data-body=""><td><span class="tri-badge tri-method-delete">DELETE</span></td><td><code>/projects/{id}/medias/{id}</code></td><td>Supprimer un média (REDACTEUR+)</td></tr>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{{.CurrentProject.ID}}/users" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{id}/users</code></td><td>Lister les membres du projet</td></tr>
+              <tr class="tri-api-doc-row" data-method="POST" data-path="/api/v1/projects/{{.CurrentProject.ID}}/users" data-body='{"email":"user@example.com","role":"REDACTEUR"}'><td><span class="tri-badge tri-method-post">POST</span></td><td><code>/projects/{id}/users</code></td><td>Attribuer un rôle (GESTIONNAIRE+)</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+        <details class="tri-details">
+          <summary>Tokens, webhooks &amp; compte</summary>
+          <table class="tri-table tri-api-doc-table">
+            <tbody>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/me" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/me</code></td><td>Utilisateur courant</td></tr>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{{.CurrentProject.ID}}/webhooks" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{id}/webhooks</code></td><td>Lister les webhooks (ADMIN)</td></tr>
+              <tr class="tri-api-doc-row" data-method="POST" data-path="/api/v1/projects/{{.CurrentProject.ID}}/webhooks" data-body='{"url":"https://example.com/hook","secret":"s3cret","events":["content.create","content.delete"]}'><td><span class="tri-badge tri-method-post">POST</span></td><td><code>/projects/{id}/webhooks</code></td><td>Créer un webhook (ADMIN)</td></tr>
+              <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{{.CurrentProject.ID}}/tokens" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{id}/tokens</code></td><td>Lister les tokens (ADMIN)</td></tr>
+            </tbody>
+          </table>
+        </details>
+      </div>
+    </div>
+  </div>
+<script src="/static/js/api-console.js"></script>
+</body>
+</html>
+{{end}}

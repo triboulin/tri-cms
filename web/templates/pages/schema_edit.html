@@ -1,0 +1,37 @@
+{{define "page:schema_edit"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      {{template "partial:flash" .}}
+
+      <div class="tri-card">
+        <h3><span class="material-icons" aria-hidden="true">edit</span> Modifier le schéma <code>{{.Content.Schema.Slug}}</code></h3>
+        <p class="tri-empty">Le slug est immuable (utilisé dans les URLs d'API) ; seuls le nom, le dossier et les champs peuvent être modifiés.</p>
+        <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/schemas/{{.Content.Schema.Slug}}/update">
+          <label>Nom</label>
+          <input type="text" name="name" value="{{.Content.Schema.Name}}" required>
+
+
+          <label style="margin-top:10px;">Champs</label>
+          <div id="fields-builder" class="tri-fields-builder" data-next-index="{{len .Content.FieldRowCtxs}}">
+            {{range .Content.FieldRowCtxs}}{{template "partial:field_row" .}}{{end}}
+          </div>
+          <button type="button" class="tri-btn tri-btn-sm tri-btn-ghost" onclick="triAddFieldRow()"><span class="material-icons" aria-hidden="true">add</span> Ajouter un champ</button>
+
+          <div style="margin-top:14px; display:flex; gap:10px;">
+            <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">save</span> Enregistrer</button>
+            <a class="tri-btn tri-btn-ghost" href="/projects/{{.CurrentProject.ID}}/conception"><span class="material-icons" aria-hidden="true">close</span> Annuler</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+<script>window.triAvailableSchemas = [{{range .Content.AvailableSchemas}}"{{.}}",{{end}}];</script>
+<script src="/static/js/field-builder.js"></script>
+</body>
+</html>
+{{end}}
