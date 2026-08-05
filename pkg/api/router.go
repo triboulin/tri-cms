@@ -1,0 +1,88 @@
+package api
+
+import (
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"tricms/pkg/storage"
+)
+
+// NewRouter builds the full HTTP router: the JSON REST API under /api/v1
+// (both browser-session and API-token authenticated) plus, if templates
+// were provided, the server-rendered HTMX admin UI.
+func NewRouter(s *Server) *chi.Mux {
+	r := chi.NewRouter()
+	r.Use(middleware.Recoverer)
+	r.Use(s.authenticate)
+
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Post("/auth/login", s.handleLogin)
+		r.Post("/auth/logout", s.handleLogout)
+		r.Get("/me", s.handleMe)
+
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireIdentity)
+
+			r.With(s.requireAuth).Get("/projects", s.handleListProjects)
+			r.With(s.requireGlobalAdmin).Post("/projects", s.handleCreateProject)
+
+			r.With(s.requireGlobalAdmin).Get("/users", s.handleListUsers)
+			r.With(s.requireGlobalAdmin).Post("/users", s.handleCreateUser)
+			r.With(s.requireGlobalAdmin).Patch("/users/{userID}", s.handleUpdateUser)
+			r.With(s.requireGlobalAdmin).Delete("/users/{userID}", s.handleDeleteUser)
+
+			r.With(s.requireGlobalAdmin).Get("/logs", s.handleListLogs)
+
+			r.Route("/projects/{projectID}", func(r chi.Router) {
+				r.Use(s.projectContext)
+
+				r.With(s.requireGlobalAdmin).Delete("/", s.handleDeleteProject)
+
+				// Project user management (spec §4.4): GESTIONNAIRE+.
+				r.With(s.requireProjectRole(storage.RoleGestionnaire)).Get("/users", s.handleListProjectUsers)
+				r.With(s.requireProjectRole(storage.RoleGestionnaire)).Post("/users", s.handleAssignProjectUser)
+				r.With(s.requireProjectRole(storage.RoleGestionnaire)).Delete("/users/{userID}", s.handleRemoveProjectUser)
+
+				// Conception (folders/schemas): read for all roles, write CONCEPTEUR+.
+				r.With(s.requireProjectAccess).Get("/folders", s.handleListFolders)
+				r.With(s.requireProjectRole(storage.RoleConcepteur)).Post("/folders", s.handleCreateFolder)
+				r.With(s.requireProjectRole(storage.RoleConcepteur)).Delete("/folders/{folderID}", s.handleDeleteFolder)
+
+				r.With(s.requireProjectAccess).Get("/schemas", s.handleListSchemas)
+				r.With(s.requireProjectAccess).Get("/schemas/{schemaSlug}", s.handleGetSchema)
+				r.With(s.requireProjectRole(storage.RoleConcepteur)).Post("/schemas", s.handleCreateSchema)
+				r.With(s.requireProjectRole(storage.RoleConcepteur)).Put("/schemas/{schemaSlug}", s.handleUpdateSchema)
+				r.With(s.requireProjectRole(storage.RoleConcepteur)).Delete("/schemas/{schemaSlug}", s.handleDeleteSchema)
+
+				// Contents (spec §2.2 note: /api/v1/contents/{slug}): read for
+				// all roles, write REDACTEUR+.
+				r.With(s.requireProjectAccess).Get("/contents/{schemaSlug}", s.handleListContents)
+				r.With(s.requireProjectAccess).Get("/contents/{schemaSlug}/{contentID}", s.handleGetContent)
+				r.With(s.requireProjectRole(storage.RoleRedacteur)).Post("/contents/{schemaSlug}", s.handleCreateContent)
+				r.With(s.requireProjectRole(storage.RoleRedacteur)).Put("/contents/{schemaSlug}/{contentID}", s.handleUpdateContent)
+				r.With(s.requireProjectRole(storage.RoleRedacteur)).Delete("/contents/{schemaSlug}/{contentID}", s.handleDeleteContent)
+
+				// Media: read for all roles, write REDACTEUR+.
+				r.With(s.requireProjectAccess).Get("/medias", s.handleListMedias)
+				r.With(s.requireProjectRole(storage.RoleRedacteur)).Post("/medias", s.handleUploadMedia)
+				r.With(s.requireProjectRole(storage.RoleRedacteur)).Delete("/medias/{mediaID}", s.handleDeleteMedia)
+
+				// API tokens & webhooks: global-admin only (spec §1, §4.2).
+				r.With(s.requireGlobalAdmin).Get("/tokens", s.handleListAPITokens)
+				r.With(s.requireGlobalAdmin).Post("/tokens", s.handleCreateAPIToken)
+				r.With(s.requireGlobalAdmin).Delete("/tokens/{tokenID}", s.handleDeleteAPIToken)
+
+				r.With(s.requireGlobalAdmin).Get("/webhooks", s.handleListWebhooks)
+				r.With(s.requireGlobalAdmin).Post("/webhooks", s.handleCreateWebhook)
+				r.With(s.requireGlobalAdmin).Put("/webhooks/{webhookID}", s.handleUpdateWebhook)
+				r.With(s.requireGlobalAdmin).Delete("/webhooks/{webhookID}", s.handleDeleteWebhook)
+			})
+		})
+	})
+
+	if s.Templates != nil {
+		mountHTMXRoutes(r, s)
+	}
+
+	return r
+}

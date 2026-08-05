@@ -1,0 +1,25 @@
+{{define "page:admin_logs"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-app">
+  {{template "partial:sidebar" .}}
+  <div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      <h2>Journal d'audit</h2>
+      <table class="tri-table">
+        <thead><tr><th>Date</th><th>Action</th><th>Utilisateur</th><th>Projet</th></tr></thead>
+        <tbody>
+        {{range .Content.Logs}}
+          <tr><td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td><td><code>{{.Action}}</code></td><td>{{.UserID}}</td><td>{{.ProjectID}}</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+{{end}}

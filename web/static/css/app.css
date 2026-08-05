@@ -1,0 +1,71 @@
+:root {
+  --tri-bg: #0f172a;
+  --tri-sidebar: #111827;
+  --tri-accent: #6366f1;
+  --tri-text: #e5e7eb;
+  --tri-muted: #9ca3af;
+  --tri-card: #1f2937;
+  --tri-border: #374151;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #0b1120;
+  color: var(--tri-text);
+}
+.tri-app { display: flex; min-height: 100vh; }
+.tri-sidebar {
+  width: 220px;
+  background: var(--tri-sidebar);
+  border-right: 1px solid var(--tri-border);
+  padding: 16px 0;
+  flex-shrink: 0;
+}
+.tri-sidebar .brand { padding: 0 16px 16px; font-weight: 700; font-size: 1.1rem; color: #fff; }
+.tri-sidebar nav a {
+  display: block;
+  padding: 10px 16px;
+  color: var(--tri-muted);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+.tri-sidebar nav a:hover, .tri-sidebar nav a.active { background: #1e293b; color: #fff; }
+.tri-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.tri-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; border-bottom: 1px solid var(--tri-border);
+  background: var(--tri-bg);
+}
+.tri-breadcrumb { color: var(--tri-muted); font-size: 0.9rem; }
+.tri-breadcrumb a { color: var(--tri-muted); text-decoration: none; }
+.tri-breadcrumb a:hover { color: #fff; }
+.tri-project-select select {
+  background: var(--tri-card); color: var(--tri-text); border: 1px solid var(--tri-border);
+  border-radius: 6px; padding: 6px 10px;
+}
+.tri-content { padding: 24px; flex: 1; }
+.tri-card {
+  background: var(--tri-card); border: 1px solid var(--tri-border); border-radius: 10px;
+  padding: 16px; margin-bottom: 12px;
+}
+table.tri-table { width: 100%; border-collapse: collapse; }
+table.tri-table th, table.tri-table td {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--tri-border); font-size: 0.9rem;
+}
+.tri-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
+  background: var(--tri-accent); color: #fff;
+}
+.tri-btn {
+  background: var(--tri-accent); color: #fff; border: none; border-radius: 6px;
+  padding: 8px 14px; cursor: pointer; font-size: 0.9rem; text-decoration: none; display: inline-block;
+}
+.tri-form input, .tri-form select {
+  display: block; width: 100%; margin-bottom: 10px; padding: 8px 10px;
+  background: #0b1120; color: var(--tri-text); border: 1px solid var(--tri-border); border-radius: 6px;
+}
+.tri-form label { font-size: 0.85rem; color: var(--tri-muted); }
+.tri-empty { color: var(--tri-muted); font-style: italic; }
+.tri-login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.tri-error { color: #f87171; margin-bottom: 10px; }

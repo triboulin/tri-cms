@@ -1,0 +1,25 @@
+{{define "page:admin_users"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-app">
+  {{template "partial:sidebar" .}}
+  <div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      <h2>Comptes globaux</h2>
+      <table class="tri-table">
+        <thead><tr><th>Email</th><th>Admin global</th></tr></thead>
+        <tbody>
+        {{range .Content.Users}}
+          <tr><td>{{.Email}}</td><td>{{if .IsGlobalAdmin}}<span class="tri-badge">ADMIN</span>{{else}}—{{end}}</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+{{end}}

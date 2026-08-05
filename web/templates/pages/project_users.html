@@ -1,0 +1,26 @@
+{{define "page:project_users"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-app">
+  {{template "partial:sidebar" .}}
+  <div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      <h2>Utilisateurs du projet</h2>
+      <table class="tri-table">
+        <thead><tr><th>Email</th><th>Rôle</th></tr></thead>
+        <tbody>
+        {{range .Content.Permissions}}
+          <tr><td>{{.Email}}</td><td><span class="tri-badge">{{.Role}}</span></td></tr>
+        {{end}}
+        </tbody>
+      </table>
+      <p class="tri-empty">Attribution restreinte aux rôles GESTIONNAIRE ou REDACTEUR depuis cette vue.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+{{end}}

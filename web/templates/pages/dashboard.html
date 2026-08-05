@@ -1,0 +1,26 @@
+{{define "page:dashboard"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-app">
+  {{template "partial:sidebar" .}}
+  <div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      <h2>Mes projets</h2>
+      {{if not .Projects}}
+        <p class="tri-empty">Aucun projet accessible pour le moment.</p>
+      {{else}}
+        {{range .Projects}}
+          <div class="tri-card">
+            <a class="tri-btn" href="/projects/{{.ID}}">{{.Name}}</a>
+          </div>
+        {{end}}
+      {{end}}
+    </div>
+  </div>
+</div>
+</body>
+</html>
+{{end}}

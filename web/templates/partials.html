@@ -1,0 +1,60 @@
+{{define "partial:head"}}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>triCMS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/1.9.12/htmx.min.js"></script>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+{{end}}
+
+{{define "partial:breadcrumb"}}
+<div class="tri-breadcrumb">
+  {{if .CurrentProject}}
+    <a href="/projects/{{.CurrentProject.ID}}">{{.CurrentProject.Name}}</a>
+  {{else}}
+    <a href="/admin">Administration</a>
+  {{end}}
+  &nbsp;›&nbsp; <strong>{{.PageTitle}}</strong>
+</div>
+{{end}}
+
+{{define "partial:project_selector"}}
+{{if gt (len .Projects) 1}}
+<form class="tri-project-select" method="get" action="/projects/redirect">
+  <select name="project_id" onchange="window.location='/projects/'+this.value">
+    {{range .Projects}}
+      <option value="{{.ID}}" {{if $.CurrentProject}}{{if eq $.CurrentProject.ID .ID}}selected{{end}}{{end}}>{{.Name}}</option>
+    {{end}}
+  </select>
+</form>
+{{end}}
+{{end}}
+
+{{define "partial:sidebar"}}
+<div class="tri-sidebar">
+  <div class="brand">triCMS</div>
+  <nav>
+    {{if .CurrentProject}}
+      {{if .Sidebar.Conception}}<a href="/projects/{{.CurrentProject.ID}}/conception">Conception</a>{{end}}
+      {{if .Sidebar.Collections}}<a href="/projects/{{.CurrentProject.ID}}">Collections</a>{{end}}
+      {{if .Sidebar.Medias}}<a href="/projects/{{.CurrentProject.ID}}/medias">Médias</a>{{end}}
+      {{if .Sidebar.Users}}<a href="/projects/{{.CurrentProject.ID}}/users">Utilisateurs</a>{{end}}
+      {{if .Sidebar.API}}<a href="/projects/{{.CurrentProject.ID}}/tokens">API</a>{{end}}
+      {{if .Sidebar.Webhooks}}<a href="/projects/{{.CurrentProject.ID}}/webhooks">Webhooks</a>{{end}}
+    {{end}}
+    {{if .User.IsGlobalAdmin}}
+      <a href="/admin/projects">Administration</a>
+      {{if .Sidebar.Logs}}<a href="/admin/logs">Logs</a>{{end}}
+    {{end}}
+    <a href="/logout">Déconnexion</a>
+  </nav>
+</div>
+{{end}}
+
+{{define "partial:topbar"}}
+<div class="tri-topbar">
+  {{template "partial:breadcrumb" .}}
+  {{template "partial:project_selector" .}}
+</div>
+{{end}}

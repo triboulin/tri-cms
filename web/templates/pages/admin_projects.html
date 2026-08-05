@@ -1,0 +1,26 @@
+{{define "page:admin_projects"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-app">
+  {{template "partial:sidebar" .}}
+  <div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      <h2>Gestion des projets</h2>
+      <table class="tri-table">
+        <thead><tr><th>Nom</th><th>ID</th></tr></thead>
+        <tbody>
+        {{range .Content.Projects}}
+          <tr><td>{{.Name}}</td><td><code>{{.ID}}</code></td></tr>
+        {{end}}
+        </tbody>
+      </table>
+      <p class="tri-empty">La suppression d'un projet nécessite une double confirmation (saisie du nom exact) via l'API.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+{{end}}

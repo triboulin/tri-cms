@@ -1,0 +1,29 @@
+{{define "page:medias"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-app">
+  {{template "partial:sidebar" .}}
+  <div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      <h2>Médias</h2>
+      {{if not .Content.Medias}}
+        <p class="tri-empty">Aucun média téléversé.</p>
+      {{else}}
+        <table class="tri-table">
+          <thead><tr><th>Fichier</th><th>Type</th><th>Taille</th></tr></thead>
+          <tbody>
+          {{range .Content.Medias}}
+            <tr><td>{{.Filename}}</td><td>{{.MimeType}}</td><td>{{.Size}} o</td></tr>
+          {{end}}
+          </tbody>
+        </table>
+      {{end}}
+    </div>
+  </div>
+</div>
+</body>
+</html>
+{{end}}

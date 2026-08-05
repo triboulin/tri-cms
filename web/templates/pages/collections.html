@@ -1,0 +1,29 @@
+{{define "page:collections"}}
+<!DOCTYPE html>
+<html lang="fr">
+{{template "partial:head" .}}
+<body>
+<div class="tri-app">
+  {{template "partial:sidebar" .}}
+  <div class="tri-main">
+    {{template "partial:topbar" .}}
+    <div class="tri-content">
+      <h2>Collections</h2>
+      {{if not .Content.Schemas}}
+        <p class="tri-empty">Aucun schéma de contenu pour ce projet.</p>
+      {{else}}
+        <table class="tri-table">
+          <thead><tr><th>Nom</th><th>Slug</th><th>Créé le</th></tr></thead>
+          <tbody>
+          {{range .Content.Schemas}}
+            <tr><td>{{.Name}}</td><td><code>{{.Slug}}</code></td><td>{{.CreatedAt.Format "2006-01-02"}}</td></tr>
+          {{end}}
+          </tbody>
+        </table>
+      {{end}}
+    </div>
+  </div>
+</div>
+</body>
+</html>
+{{end}}
