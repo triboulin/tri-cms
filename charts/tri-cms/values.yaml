@@ -56,7 +56,7 @@ resources:
 persistence:
   enabled: true
   size: 64Gi
-  storageClassName: "" # vide = StorageClass par défaut du cluster
+  # storageClassName: # non defini = StorageClass par défaut du cluster
   accessModes:
     - ReadWriteOnce
 
