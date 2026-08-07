@@ -7,11 +7,12 @@ metadata:
 spec:
   replicas: {{ .Values.replicaCount }}
   {{- if .Values.persistence.enabled }}
-  # local-path (k3s's default StorageClass) is node-local / ReadWriteOnce:
-  # a RollingUpdate would try to start the new pod (and mount the same PVC)
-  # before the old one releases it, and get stuck Pending. Recreate tears
-  # the old pod down first -- a few seconds of downtime per deploy, but a
-  # rollout that actually completes.
+  # The PVC is ReadWriteOnce (single SQLite writer): a RollingUpdate would
+  # try to start the new pod (and mount the same PVC) before the old one
+  # releases it, and get stuck Pending -- true for local-path (node-local)
+  # and still true for longhorn RWO volumes (attach/detach isn't
+  # simultaneous). Recreate tears the old pod down first -- a few seconds
+  # of downtime per deploy, but a rollout that actually completes.
   strategy:
     type: Recreate
   {{- end }}

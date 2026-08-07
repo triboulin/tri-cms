@@ -46,13 +46,16 @@ resources:
 # uploadés vivent tous sous /data (voir Dockerfile: VOLUME ["/data"]).
 # Sans volume persistant, chaque redéploiement ou restart de pod efface
 # toutes les données -- donc activé par défaut ici, contrairement au chart
-# générique du skill. Backé par la StorageClass par défaut du cluster
-# (local-path sur k3s, qui est RWO / node-local -- voir la stratégie de
-# déploiement "Recreate" dans deployment.yaml, nécessaire pour ce type de
-# volume).
+# générique du skill. Backé par longhorn (répliqué multi-noeud,
+# allowVolumeExpansion) plutôt que la StorageClass "default" du cluster :
+# si plusieurs StorageClass sont marquées default (ex. local-path +
+# longhorn), la résolution du défaut par l'admission controller est
+# ambiguë et le PVC peut rester indéfiniment unbound. Reste en
+# ReadWriteOnce (un seul writer SQLite) donc la stratégie de déploiement
+# "Recreate" dans deployment.yaml reste nécessaire malgré la réplication.
 persistence:
   enabled: true
-  size: 5Gi
+  size: 64Gi
   storageClassName: "" # vide = StorageClass par défaut du cluster
   accessModes:
     - ReadWriteOnce
