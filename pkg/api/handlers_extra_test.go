@@ -49,7 +49,7 @@ func TestMalformedBodies_Return400(t *testing.T) {
 		{"create folder", http.MethodPost, "/api/v1/projects/" + p.ID + "/folders"},
 		{"create schema", http.MethodPost, "/api/v1/projects/" + p.ID + "/schemas"},
 		{"create webhook", http.MethodPost, "/api/v1/projects/" + p.ID + "/webhooks"},
-		{"create token", http.MethodPost, "/api/v1/projects/" + p.ID + "/tokens"},
+		{"create token", http.MethodPost, "/api/v1/tokens"},
 		{"create user", http.MethodPost, "/api/v1/users"},
 		{"assign project user", http.MethodPost, "/api/v1/projects/" + p.ID + "/users"},
 	}
@@ -127,19 +127,23 @@ func TestRemoveProjectUser_UnknownPermission404(t *testing.T) {
 	}
 }
 
-func TestAPIToken_InsufficientRoleForbidden(t *testing.T) {
+// TestAPIToken_GrantsConcepteurLevelAccess replaces the old
+// TestAPIToken_InsufficientRoleForbidden: tokens are global ADMIN-equivalent
+// now (see pkg/api/middleware.go's requireProjectRole), so an action that
+// requires CONCEPTEUR (schema creation) must succeed via token, not be
+// refused. There's no such thing as a "limited" token anymore -- every token
+// is minted from Administration with the same, full authority.
+func TestAPIToken_GrantsConcepteurLevelAccess(t *testing.T) {
 	e := newTestEnv(t)
 	admin := e.createUser("tok1@x.com", true)
 	p := e.createProject("TokRole")
-	rec := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/tokens", admin, createTokenRequest{Name: "limited"})
-	tok := decodeBody[createTokenResponse](t, rec)
+	tok := e.createToken(t, admin, "full-access")
 
-	// Tokens grant REDACTEUR-equivalent access only: schema creation (CONCEPTEUR+) must be refused.
-	rec = e.requestWithToken(http.MethodPost, "/api/v1/projects/"+p.ID+"/schemas", tok.Token, schemaRequest{
+	rec := e.requestWithToken(http.MethodPost, "/api/v1/projects/"+p.ID+"/schemas", tok, schemaRequest{
 		Slug: "x", Name: "X", Definition: trischema.Definition{Fields: []trischema.Field{{Key: "a", Type: trischema.Text, Cardinality: trischema.Simple}}},
 	})
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for token attempting CONCEPTEUR-level action, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for token attempting CONCEPTEUR-level action (tokens are ADMIN-equivalent), got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

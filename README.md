@@ -57,12 +57,20 @@ web/              templates HTML (embed.FS) + assets statiques (CSS, HTMX via CD
   tokens API, webhooks, logs.
 - Rôles projet cumulatifs : `REDACTEUR ⊂ GESTIONNAIRE ⊂ CONCEPTEUR`, stockés
   dans `project_permissions`.
-- Un token API (`Authorization: Bearer ...`) donne un accès équivalent
-  REDACTEUR, strictement limité au projet pour lequel il a été émis.
+- Un token API (`Authorization: Bearer ...`) équivaut systématiquement à un
+  compte **ADMIN global complet** : il n'existe pas de token restreint à un
+  projet ou à un rôle inférieur. Les tokens sont générés exclusivement
+  depuis Administration › API (jamais depuis un projet). Seule exception :
+  la suppression d'un projet n'a **aucune route API**, même pour un token —
+  c'est une action irréversible réservée à l'IHM HTMX (double confirmation
+  par saisie du nom exact).
 - Chaque middleware RBAC (`pkg/api/middleware.go`) est couvert par des tests
   `httptest` vérifiant explicitement les 403/404, y compris les cas limites
   de la matrice de rôles (ex : un GESTIONNAIRE ne peut pas s'auto-attribuer
-  ou attribuer le rôle CONCEPTEUR — seul ADMIN le peut).
+  ou attribuer le rôle CONCEPTEUR — seul ADMIN le peut) et le fait qu'un
+  token accède à n'importe quel projet, pas seulement celui pour lequel il
+  a été créé à l'origine (il n'y a d'ailleurs plus de notion de projet
+  "d'origine").
 
 ## Tests & couverture
 

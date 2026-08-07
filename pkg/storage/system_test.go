@@ -201,7 +201,10 @@ func TestSystemDB_APITokens(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tok := &APIToken{ID: uuid.NewString(), ProjectID: proj.ID, TokenHash: "hashed", Name: "CI token"}
+	// Tokens are global/ADMIN-equivalent now (see pkg/api middleware):
+	// ProjectID is left nil for every token minted going forward, and
+	// ListAPITokens no longer takes a project scope.
+	tok := &APIToken{ID: uuid.NewString(), TokenHash: "hashed", Name: "CI token"}
 	if err := db.CreateAPIToken(ctx, tok); err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -210,8 +213,11 @@ func TestSystemDB_APITokens(t *testing.T) {
 	if err != nil || got.ID != tok.ID {
 		t.Fatalf("get by hash mismatch: %v %+v", err, got)
 	}
+	if got.ProjectID != nil {
+		t.Fatalf("expected nil ProjectID for a global token, got %v", *got.ProjectID)
+	}
 
-	list, err := db.ListAPITokens(ctx, proj.ID)
+	list, err := db.ListAPITokens(ctx)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("expected 1 token: %v (%d)", err, len(list))
 	}

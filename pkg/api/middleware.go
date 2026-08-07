@@ -73,15 +73,18 @@ func (s *Server) requireIdentity(next http.Handler) http.Handler {
 	})
 }
 
-// requireGlobalAdmin rejects any caller who isn't the global ADMIN role.
+// requireGlobalAdmin rejects any caller who isn't global-admin-equivalent:
+// a session user with IsGlobalAdmin, or any API token (every token is
+// global-admin equivalent by design -- see ActorIsGlobalAdmin, specs.md
+// §1). The one deliberate exception is project deletion, which has no API
+// route at all (see router.go) regardless of this check.
 func (s *Server) requireGlobalAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := UserFromContext(r.Context())
-		if user == nil {
+		if UserFromContext(r.Context()) == nil && APITokenFromContext(r.Context()) == nil {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		if !user.IsGlobalAdmin {
+		if !ActorIsGlobalAdmin(r.Context()) {
 			writeError(w, http.StatusForbidden, "forbidden: global admin required")
 			return
 		}
@@ -121,21 +124,14 @@ func (s *Server) projectContext(next http.Handler) http.Handler {
 }
 
 // requireProjectRole rejects the request unless the caller is a global
-// admin, holds at least `min` role on the in-scope project, or presents a
-// valid API token scoped to that same project (API tokens grant full
-// REDACTEUR-equivalent programmatic access to their project, per spec
-// §2.1's token/content model for headless consumption).
+// admin, holds at least `min` role on the in-scope project, or presents an
+// API token: every token is global-admin equivalent (specs.md §1), so a
+// token satisfies any `min` on any project, not just a matching one.
 func (s *Server) requireProjectRole(min storage.Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			project := ProjectFromContext(r.Context())
-
 			if tok := APITokenFromContext(r.Context()); tok != nil {
-				if project != nil && tok.ProjectID == project.ID && auth.HasRole(storage.RoleRedacteur, min) {
-					next.ServeHTTP(w, r)
-					return
-				}
-				writeError(w, http.StatusForbidden, "forbidden: token not authorized for this project/action")
+				next.ServeHTTP(w, r)
 				return
 			}
 

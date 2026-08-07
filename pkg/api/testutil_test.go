@@ -90,6 +90,19 @@ func (e *testEnv) createProject(name string) *storage.Project {
 	return p
 }
 
+// createToken mints a global, ADMIN-equivalent API token via the real HTTP
+// route (POST /api/v1/tokens, admin-only) and returns its plaintext value.
+// Centralized here since a growing number of tests need a token identity,
+// not just a session, to exercise the "token = global admin" design.
+func (e *testEnv) createToken(t *testing.T, admin *storage.User, name string) string {
+	t.Helper()
+	rec := e.request(http.MethodPost, "/api/v1/tokens", admin, createTokenRequest{Name: name})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create token %q: expected 201, got %d: %s", name, rec.Code, rec.Body.String())
+	}
+	return decodeBody[createTokenResponse](t, rec).Token
+}
+
 func (e *testEnv) setRole(userID, projectID string, role storage.Role) {
 	e.t.Helper()
 	if err := e.server.System.SetProjectPermission(bgCtx(), &storage.ProjectPermission{UserID: userID, ProjectID: projectID, Role: role}); err != nil {

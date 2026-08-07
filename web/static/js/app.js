@@ -1,7 +1,10 @@
 // Site-wide small behaviors, loaded on every page from partial:head:
-//  - breadcrumb dropdowns: clickable/keyboard-operable, not just hover-only
-//    (hover alone doesn't work on touch devices, and the breadcrumb is now
-//    the only navigation since the sidebar was removed).
+//  - breadcrumb dropdowns: open on click/keyboard AND on hover. Hover uses a
+//    short delayed close (not bare CSS :hover) so moving the pointer from
+//    the label to the dropdown across the small gap between them doesn't
+//    slam the menu shut before it arrives -- a real bug that a plain
+//    ":hover { display:block }" rule used to cause (see app.css). Click
+//    still works standalone for touch/keyboard, where hover doesn't apply.
 //  - a single styled confirmation modal replacing every native confirm()/
 //    prompt() call, including the "retype the exact name" project-delete
 //    flow.
@@ -54,6 +57,32 @@
         }
       });
     }
+
+    // Forgiving hover: open immediately on enter, but close on leave only
+    // after a short grace period, cancelled if the pointer re-enters (either
+    // back onto the label or onto the dropdown itself, since the dropdown is
+    // a DOM child of this same element) before it fires.
+    var closeTimer = null;
+    function clearCloseTimer() {
+      if (closeTimer) {
+        clearTimeout(closeTimer);
+        closeTimer = null;
+      }
+    }
+    hoverEl.addEventListener('mouseenter', function () {
+      clearCloseTimer();
+      closeAllCrumbs(crumb);
+      crumb.classList.add('open');
+      if (caret) caret.setAttribute('aria-expanded', 'true');
+    });
+    hoverEl.addEventListener('mouseleave', function () {
+      clearCloseTimer();
+      closeTimer = setTimeout(function () {
+        crumb.classList.remove('open');
+        if (caret) caret.setAttribute('aria-expanded', 'false');
+        closeTimer = null;
+      }, 300);
+    });
   });
 
   document.addEventListener('click', function () {

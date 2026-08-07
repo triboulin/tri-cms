@@ -55,11 +55,14 @@ body {
   background: var(--tri-card); border: 1px solid var(--tri-border); border-radius: 8px;
   box-shadow: 0 8px 24px rgba(29,31,37,0.12); padding: 6px; z-index: 20;
 }
-/* Opening is click/keyboard-driven only (see app.js): a hover-to-open rule
-   used to sit here, but crossing the gap between the label and the dropdown
-   at normal mouse speed routinely broke the hover chain and slammed the
-   menu shut before the pointer arrived. Click is the single source of
-   truth for "open", so it can never misfire like that. */
+/* Opening/closing is driven entirely by app.js toggling this one .open
+   class -- for both click/keyboard AND hover. A plain CSS ":hover { display:
+   block }" rule used to sit here instead, but crossing the gap between the
+   label and the dropdown at normal mouse speed routinely broke the hover
+   chain and slammed the menu shut before the pointer arrived. app.js now
+   implements hover itself with a short delayed close (mouseenter/mouseleave
+   + timeout) so the class only ever comes off after a real, sustained
+   pointer exit -- never mid-crossing. */
 .tri-crumb.open .tri-crumb-dropdown { display: block; }
 .tri-crumb-dropdown a {
   display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px;

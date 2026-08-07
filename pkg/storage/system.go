@@ -372,10 +372,11 @@ func (s *SystemDB) GetAPITokenByHash(ctx context.Context, hash string) (*APIToke
 	return &t, nil
 }
 
-func (s *SystemDB) ListAPITokens(ctx context.Context, projectID string) ([]*APIToken, error) {
+// ListAPITokens returns every API token, global scope (Administration):
+// tokens are no longer per-project, so there is nothing left to filter by.
+func (s *SystemDB) ListAPITokens(ctx context.Context) ([]*APIToken, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, project_id, token_hash, name, created_at FROM api_tokens WHERE project_id = ? ORDER BY created_at`,
-		projectID)
+		`SELECT id, project_id, token_hash, name, created_at FROM api_tokens ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}

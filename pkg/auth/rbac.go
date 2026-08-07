@@ -11,7 +11,6 @@ const (
 	SectionCollections Section = "collections" // content CRUD
 	SectionMedias      Section = "medias"
 	SectionUsers       Section = "users"    // project-scoped user management
-	SectionAPI         Section = "api"      // global-admin only
 	SectionWebhooks    Section = "webhooks" // global-admin only
 	SectionLogs        Section = "logs"     // global-admin only
 )
@@ -29,7 +28,6 @@ var sectionMinRole = map[Section]storage.Role{
 // globalAdminOnlySections lists sections visible only to ADMIN (global scope),
 // regardless of any project role the user might hold.
 var globalAdminOnlySections = map[Section]bool{
-	SectionAPI:      true,
 	SectionWebhooks: true,
 	SectionLogs:     true,
 }

@@ -89,22 +89,17 @@ func TestFolder_MissingNameAndDeleteUnknown(t *testing.T) {
 	}
 }
 
-func TestDeleteProject_MalformedBody(t *testing.T) {
-	e := newTestEnv(t)
-	admin := e.createUser("dp1@x.com", true)
-	p := e.createProject("DP")
-	rec := e.request(http.MethodDelete, "/api/v1/projects/"+p.ID, admin, map[string]int{"confirm_name": 1})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
+// Deleting a project via the JSON API has no route at all anymore -- see
+// TestDeleteProject_NoAPIRoute in handlers_projects_test.go, which covers
+// that design decision directly (a malformed-body variant of it doesn't add
+// anything: the route 404s before any body is ever parsed).
 
 func TestTokenWebhook_DeleteUpdateUnknown404(t *testing.T) {
 	e := newTestEnv(t)
 	admin := e.createUser("tw1@x.com", true)
 	p := e.createProject("TW")
 
-	rec := e.request(http.MethodDelete, "/api/v1/projects/"+p.ID+"/tokens/does-not-exist", admin, nil)
+	rec := e.request(http.MethodDelete, "/api/v1/tokens/does-not-exist", admin, nil)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rec.Code)
 	}

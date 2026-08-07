@@ -10,7 +10,13 @@ import (
 	"tricms/pkg/storage"
 )
 
-func TestAPITokens_AdminOnlyAndTokenGrantsProjectAccess(t *testing.T) {
+// TestAPITokens_AdminOnlyAndTokenIsGlobalAdmin covers the current design:
+// tokens live in the global Administration scope (not under any project),
+// only a global ADMIN may mint or list them, and every minted token is
+// ADMIN-equivalent -- it works against *any* project, not just one it was
+// "created for" (there's no such notion anymore; see pkg/api/router.go and
+// pkg/api/middleware.go).
+func TestAPITokens_AdminOnlyAndTokenIsGlobalAdmin(t *testing.T) {
 	e := newTestEnv(t)
 	admin := e.createUser("t1@x.com", true)
 	concepteur := e.createUser("t2@x.com", false)
@@ -18,12 +24,12 @@ func TestAPITokens_AdminOnlyAndTokenGrantsProjectAccess(t *testing.T) {
 	e.setRole(concepteur.ID, p.ID, storage.RoleConcepteur)
 
 	// Non-admin cannot create tokens.
-	rec := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/tokens", concepteur, createTokenRequest{Name: "CI"})
+	rec := e.request(http.MethodPost, "/api/v1/tokens", concepteur, createTokenRequest{Name: "CI"})
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", rec.Code)
 	}
 
-	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/tokens", admin, createTokenRequest{Name: "CI"})
+	rec = e.request(http.MethodPost, "/api/v1/tokens", admin, createTokenRequest{Name: "CI"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -32,7 +38,13 @@ func TestAPITokens_AdminOnlyAndTokenGrantsProjectAccess(t *testing.T) {
 		t.Fatal("expected plaintext token to be returned once")
 	}
 
-	rec = e.request(http.MethodGet, "/api/v1/projects/"+p.ID+"/tokens", admin, nil)
+	// Non-admin cannot list tokens either.
+	rec = e.request(http.MethodGet, "/api/v1/tokens", concepteur, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 listing tokens as non-admin, got %d", rec.Code)
+	}
+
+	rec = e.request(http.MethodGet, "/api/v1/tokens", admin, nil)
 	list := decodeBody[[]tokenView](t, rec)
 	if len(list) != 1 {
 		t.Fatalf("expected 1 token, got %d", len(list))
@@ -51,15 +63,29 @@ func TestAPITokens_AdminOnlyAndTokenGrantsProjectAccess(t *testing.T) {
 		t.Fatalf("expected 201 via API token, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	// A token cannot be used against a *different* project.
+	// The same token also works against a *different* project: it's global
+	// ADMIN-equivalent, not scoped to whichever project it was minted near.
 	other := e.createProject("Other")
 	rec = e.requestWithToken(http.MethodGet, "/api/v1/projects/"+other.ID+"/contents/item", created.Token, nil)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for token scoped to a different project, got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		// "item" schema doesn't exist in `other`, so the list is simply empty
+		// -- crucially not 403: the token itself is authorized for this project.
+		t.Fatalf("expected 200 (empty list, not a permission error) for a different project, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// A token can also list every project (ADMIN-equivalent), not just ones
+	// it happens to have interacted with.
+	rec = e.requestWithToken(http.MethodGet, "/api/v1/projects", created.Token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 listing all projects via token, got %d", rec.Code)
+	}
+	projects := decodeBody[[]storage.Project](t, rec)
+	if len(projects) != 2 {
+		t.Fatalf("expected token to see all %d projects, got %d", 2, len(projects))
 	}
 
 	// Revoke.
-	rec = e.request(http.MethodDelete, "/api/v1/projects/"+p.ID+"/tokens/"+created.ID, admin, nil)
+	rec = e.request(http.MethodDelete, "/api/v1/tokens/"+created.ID, admin, nil)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rec.Code)
 	}

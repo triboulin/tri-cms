@@ -10,21 +10,23 @@ import (
 	"tricms/pkg/storage"
 )
 
+// tokenView omits ProjectID (storage.APIToken.ProjectID is now vestigial):
+// every token minted through this handler is global and ADMIN-equivalent,
+// so there is nothing project-scoped left worth exposing.
 type tokenView struct {
-	ID        string `json:"id"`
-	ProjectID string `json:"project_id"`
-	Name      string `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func toTokenView(t *storage.APIToken) tokenView {
-	return tokenView{ID: t.ID, ProjectID: t.ProjectID, Name: t.Name}
+	return tokenView{ID: t.ID, Name: t.Name}
 }
 
-// handleListAPITokens lists a project's API tokens (never their plaintext
-// or hash). Global-admin only (spec §1: "gestion des tokens API").
+// handleListAPITokens lists every API token (never their plaintext or
+// hash). Global scope, managed from Administration -- global-admin only
+// (spec §1: "gestion des tokens API").
 func (s *Server) handleListAPITokens(w http.ResponseWriter, r *http.Request) {
-	project := ProjectFromContext(r.Context())
-	tokens, err := s.System.ListAPITokens(r.Context(), project.ID)
+	tokens, err := s.System.ListAPITokens(r.Context())
 	if err != nil {
 		writeStorageError(w, err)
 		return
@@ -45,11 +47,13 @@ type createTokenResponse struct {
 	Token string `json:"token"` // shown once, per spec §2.1
 }
 
-// handleCreateAPIToken mints a new API token for the in-scope project. The
-// plaintext is returned exactly once; only its hash is persisted.
-// Global-admin only.
+// handleCreateAPIToken mints a new API token. It is always global and
+// ADMIN-equivalent (see pkg/auth middleware): any bearer of this token can
+// do everything a global ADMIN can through the API, with the single
+// exception of deleting a project (no API route exists for that -- see
+// router.go). The plaintext is returned exactly once; only its hash is
+// persisted. Global-admin only to create.
 func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
-	project := ProjectFromContext(r.Context())
 	var req createTokenRequest
 	if err := decodeJSON(r, &req); err != nil || req.Name == "" {
 		writeError(w, http.StatusBadRequest, "field 'name' is required")
@@ -63,7 +67,6 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 	t := &storage.APIToken{
 		ID:        uuid.NewString(),
-		ProjectID: project.ID,
 		TokenHash: auth.HashAPIToken(plaintext),
 		Name:      req.Name,
 	}
@@ -71,6 +74,7 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		writeStorageError(w, err)
 		return
 	}
+	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), "", "token.create", map[string]string{"name": t.Name})
 	writeJSON(w, http.StatusCreated, createTokenResponse{tokenView: toTokenView(t), Token: plaintext})
 }
 
@@ -81,5 +85,6 @@ func (s *Server) handleDeleteAPIToken(w http.ResponseWriter, r *http.Request) {
 		writeStorageError(w, err)
 		return
 	}
+	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), "", "token.delete", map[string]string{"id": tokenID})
 	w.WriteHeader(http.StatusNoContent)
 }

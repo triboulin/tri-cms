@@ -183,7 +183,7 @@ func TestHTMX_AdminPages_GlobalAdminOnly(t *testing.T) {
 	regular := e.createUser("hregular@x.com", false)
 	p := e.createProject("Visible To Admin")
 
-	for _, path := range []string{"/admin", "/admin/projects", "/admin/users"} {
+	for _, path := range []string{"/admin", "/admin/projects", "/admin/users", "/admin/tokens"} {
 		rec := e.getHTML(path, regular)
 		if rec.Code != http.StatusForbidden && rec.Code != http.StatusSeeOther {
 			t.Fatalf("expected 403/redirect for non-admin at %s, got %d", path, rec.Code)
@@ -201,6 +201,12 @@ func TestHTMX_AdminPages_GlobalAdminOnly(t *testing.T) {
 	rec = e.getHTML("/admin/users", admin)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "hadmin@x.com") {
 		t.Fatalf("expected 200 listing users, got %d", rec.Code)
+	}
+	// API tokens live in Administration too (moved from the project scope):
+	// global-admin only, same as the other admin pages.
+	rec = e.getHTML("/admin/tokens", admin)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for admin tokens page, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	// Logs are project-scoped now (still admin-only): a plain member with no

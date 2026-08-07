@@ -202,10 +202,7 @@ func (s *Server) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := UserFromContext(r.Context())
-	if user != nil {
-		_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.create", map[string]string{"schema": schemaSlug, "id": c.ID})
-	}
+	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.create", map[string]string{"schema": schemaSlug, "id": c.ID})
 	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentCreate, map[string]string{"id": c.ID, "schema": schemaSlug})
 
 	cr, _ := toContentResponse(c)
@@ -276,10 +273,7 @@ func (s *Server) handleUpdateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := UserFromContext(r.Context())
-	if user != nil {
-		_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.update", map[string]string{"schema": schemaSlug, "id": contentID})
-	}
+	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.update", map[string]string{"schema": schemaSlug, "id": contentID})
 	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": schemaSlug})
 
 	cr, _ := toContentResponse(existing)
@@ -319,10 +313,7 @@ func (s *Server) handleDeleteContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := UserFromContext(r.Context())
-	if user != nil {
-		_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.delete", map[string]string{"schema": schemaSlug, "id": contentID})
-	}
+	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.delete", map[string]string{"schema": schemaSlug, "id": contentID})
 	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentDelete, map[string]string{"id": contentID, "schema": schemaSlug})
 	w.WriteHeader(http.StatusNoContent)
 }

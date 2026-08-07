@@ -26,8 +26,24 @@ func NewRouter(s *Server) *chi.Mux {
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireIdentity)
 
-			r.With(s.requireAuth).Get("/projects", s.handleListProjects)
+			// Listing projects works for any authenticated identity (session
+			// user or API token, every token being global-admin equivalent);
+			// handleListProjects itself scopes the result per-identity.
+			r.Get("/projects", s.handleListProjects)
 			r.With(s.requireGlobalAdmin).Post("/projects", s.handleCreateProject)
+			// Deliberately no DELETE /projects/{projectID} here: project
+			// deletion is destructive and easy to trigger by mistake from a
+			// script, so it's reachable only through the HTMX admin UI
+			// (htmxAdminDeleteProject), which forces a re-typed-name
+			// double-confirmation. See spec_sveltekit_tricms_cloudflare.md
+			// §9 for the rationale.
+
+			// API tokens: global scope, Administration-only (spec §1, §4.3).
+			// Every token minted here is ADMIN-equivalent -- see
+			// pkg/auth middleware and handlers_tokens.go.
+			r.With(s.requireGlobalAdmin).Get("/tokens", s.handleListAPITokens)
+			r.With(s.requireGlobalAdmin).Post("/tokens", s.handleCreateAPIToken)
+			r.With(s.requireGlobalAdmin).Delete("/tokens/{tokenID}", s.handleDeleteAPIToken)
 
 			r.With(s.requireGlobalAdmin).Get("/users", s.handleListUsers)
 			r.With(s.requireGlobalAdmin).Post("/users", s.handleCreateUser)
@@ -36,8 +52,6 @@ func NewRouter(s *Server) *chi.Mux {
 
 			r.Route("/projects/{projectID}", func(r chi.Router) {
 				r.Use(s.projectContext)
-
-				r.With(s.requireGlobalAdmin).Delete("/", s.handleDeleteProject)
 
 				// Project user management (spec §4.4): GESTIONNAIRE+.
 				r.With(s.requireProjectRole(storage.RoleGestionnaire)).Get("/users", s.handleListProjectUsers)
@@ -68,11 +82,7 @@ func NewRouter(s *Server) *chi.Mux {
 				r.With(s.requireProjectRole(storage.RoleRedacteur)).Post("/medias", s.handleUploadMedia)
 				r.With(s.requireProjectRole(storage.RoleRedacteur)).Delete("/medias/{mediaID}", s.handleDeleteMedia)
 
-				// API tokens & webhooks: global-admin only (spec §1, §4.2).
-				r.With(s.requireGlobalAdmin).Get("/tokens", s.handleListAPITokens)
-				r.With(s.requireGlobalAdmin).Post("/tokens", s.handleCreateAPIToken)
-				r.With(s.requireGlobalAdmin).Delete("/tokens/{tokenID}", s.handleDeleteAPIToken)
-
+				// Webhooks: global-admin only (spec §1, §4.2), still project-scoped.
 				r.With(s.requireGlobalAdmin).Get("/webhooks", s.handleListWebhooks)
 				r.With(s.requireGlobalAdmin).Post("/webhooks", s.handleCreateWebhook)
 				r.With(s.requireGlobalAdmin).Put("/webhooks/{webhookID}", s.handleUpdateWebhook)

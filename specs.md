@@ -23,12 +23,14 @@ Les rôles projet sont **cumulatifs par hiérarchie** : chaque rôle hérite imp
 
 | Rôle | Portée | Périmètre d'actions |
 |---|---|---|
-| **ADMIN** | Global | Accès total : gestion des comptes globalement, création/suppression de projets, gestion des tokens API, des webhooks, et des audit logs globaux. |
+| **ADMIN** | Global | Accès total : gestion des comptes globalement, création de projets, gestion des tokens API (portée globale), des webhooks, et des audit logs globaux. |
 | **CONCEPTEUR** | Projet | Tous les droits du Gestionnaire + création, modification et suppression des schémas/collections de contenu et de la structure des dossiers. |
 | **GESTIONNAIRE** | Projet | Tous les droits du Rédacteur + création et affectation des comptes utilisateurs (rôles GESTIONNAIRE ou REDACTEUR) rattachés à son projet. |
 | **REDACTEUR** | Projet | Création, édition, suppression et gestion des états (`draft`/`published`) des contenus (objets), ainsi que téléversement/gestion des médias. |
 
 > **Précision** : un même utilisateur peut posséder des rôles différents selon les projets (une ligne `project_permissions` par couple `user_id`/`project_id`). Un utilisateur `is_global_admin = 1` n'a pas besoin d'entrée dans `project_permissions` pour accéder à un projet.
+>
+> **Tokens API** : un token (`Authorization: Bearer ...`) est généré exclusivement depuis la vue Administration (portée globale, jamais depuis un projet) et **équivaut systématiquement à un compte ADMIN complet** — tous projets, toutes actions couvertes par l'API JSON. Il n'existe pas de token restreint à un projet ou à un rôle inférieur. Exception volontaire à ce principe : **la suppression d'un projet n'a aucune route API**, quelle que soit l'identité (session ADMIN ou token) — c'est une action irréversible qui doit rester exclusivement accessible via l'IHM (Administration › Projets), avec double confirmation par saisie du nom exact, pour éviter qu'un script mal écrit ou un token compromis ne l'exécute par erreur.
 
 ---
 
@@ -94,6 +96,7 @@ CREATE TABLE global_logs (
 > - `users.id` et `projects.id` doivent être des identifiants opaques non énumérables (UUID v4 ou équivalent) pour éviter les attaques par énumération sur les endpoints API.
 > - `password_hash` doit être généré avec un algorithme de hachage lent (bcrypt ou argon2id), jamais MD5/SHA seul.
 > - `api_tokens.token_hash` : le token en clair n'est affiché qu'une seule fois à la création ; seul son hash est persisté.
+> - `api_tokens.project_id` est conservé uniquement pour compatibilité avec les lignes créées avant le passage au modèle de tokens globaux ; tout token créé désormais a `project_id = NULL` et n'est plus rattaché à un projet particulier (voir §1 — un token équivaut systématiquement à ADMIN global).
 > - `global_logs.action` suit une convention `<ressource>.<verbe>` (ex : `project.create`, `user.suspend`) cohérente avec `webhooks.events`.
 > - `webhooks.kind` distingue deux mécanismes de livraison, tous deux couverts par la même politique de retry/backoff (`pkg/webhooks.Dispatcher`) :
 >   - `generic` (défaut) : POST signé (HMAC-SHA256, header `X-TriCMS-Signature: sha256=<hex>`) vers `webhooks.url`, avec `webhooks.secret` en clair.
@@ -226,10 +229,9 @@ L'IHM est entièrement rendue par le binaire Go via des templates HTML dynamisé
 
 ### 4.1 Zone Supérieure (Navigation globale)
 
-- **Fil d'Ariane dynamique** : `[Projet / Administration] > [Nom de la Page]`.
-- **Sélecteur de Projet** :
-  - Présent si l'utilisateur a accès à plus d'1 projet.
-  - Si l'utilisateur n'a accès qu'à 1 seul projet, sélection automatique et masquage du composant `<select>`.
+- **Fil d'Ariane dynamique** : `[Projet / Administration] > [Nom de la Page]`, chaque niveau étant un menu déroulant listant les destinations sœurs (autres projets, autres sections).
+- Chaque niveau du fil d'Ariane s'ouvre **au clic/clavier ET au survol** (menu déroulant à fermeture différée, pour rester utilisable au clavier et sur écran tactile tout en restant confortable à la souris).
+- **Sélecteur de Projet** : intégré au premier niveau du fil d'Ariane (pas un `<select>` séparé) ; liste tous les projets accessibles, plus « Nouveau projet » et « Administration » pour un ADMIN.
 
 ### 4.2 Menu Latéral / Sous-menu d'un Projet
 
@@ -238,20 +240,22 @@ L'IHM est entièrement rendue par le binaire Go via des templates HTML dynamisé
 ├── [Collections]   --> Visible par tous (CONCEPTEUR, GESTIONNAIRE, REDACTEUR)
 ├── [Médias]        --> Visible par tous (Section dédiée à la gestion des fichiers)
 ├── [Utilisateurs]  --> Visible uniquement si rôle == GESTIONNAIRE (ou ADMIN)
-├── [API]           --> Visible uniquement si rôle == ADMIN
 ├── [Webhooks]      --> Visible uniquement si rôle == ADMIN
 └── [Logs]          --> Visible uniquement si rôle == ADMIN
 ```
+
+> **Précision** : `[API]` (gestion des tokens) ne fait plus partie du sous-menu d'un projet — voir §4.3. Un token n'étant plus rattaché à un projet particulier (il équivaut à ADMIN global, §1), il n'y avait plus de sens à le faire vivre dans la portée d'un projet.
 
 ### 4.3 Vue Administration (Rôles ADMIN globaux)
 
 Accessible depuis le fil d'Ariane via l'élément `[Administration]` :
 
-- **Gestion des Projets** : création/suppression de projets (déclenche la création/suppression du dossier `./data/projects/{id}`).
+- **Gestion des Projets** : liste des projets existants et leur suppression (double confirmation). La *création* d'un projet ne se fait volontairement qu'à un seul endroit, l'accueil (« Nouveau projet », §4.1) — dupliquer ce formulaire dans Administration › Projets créait une confusion entre deux vues à l'apparence quasi identique.
+- **Gestion des Tokens API** : génération et révocation de tokens globaux. Chaque token créé ici équivaut à un compte ADMIN complet (§1) ; la page inclut une documentation interactive de l'API (console d'essai + référence des routes).
 - **Gestion des Comptes Globaux** : création, modification et suspension des utilisateurs du système.
 - **Matrice Globale des Droits** : affectation directe des rôles (CONCEPTEUR, GESTIONNAIRE, REDACTEUR) par projet et par utilisateur.
 
-> **Précision** : la suppression d'un projet doit être une action à double confirmation (ex : saisie du nom du projet), car elle entraîne la suppression irréversible du dossier `client.db` et des médias associés.
+> **Précision** : la suppression d'un projet doit être une action à double confirmation (ex : saisie du nom du projet), car elle entraîne la suppression irréversible du dossier `client.db` et des médias associés. Elle n'est accessible que par cette vue HTMX — volontairement absente de l'API JSON (§1) — pour qu'aucun script ni token compromis ne puisse la déclencher par erreur.
 
 ### 4.4 Vue Utilisateurs Projet (Rôle GESTIONNAIRE)
 

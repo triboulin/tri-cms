@@ -122,7 +122,7 @@ func bootstrapFirstAdmin(system *storage.SystemDB) error {
 	}
 
 	email := envOr("TRICMS_BOOTSTRAP_EMAIL", "admin@tricms.local")
-	password := os.Getenv("TRICMS_BOOTSTRAP_PASS")
+	password := os.Getenv("TRICMS_BOOTSTRAP_PASSWORD")
 	generated := password == ""
 	if generated {
 		var err error
@@ -149,7 +149,7 @@ func bootstrapFirstAdmin(system *storage.SystemDB) error {
 		log.Printf("  password: %s\n", password)
 		log.Println("Change this password immediately after logging in.")
 	} else {
-		log.Println("  password: (set via TRICMS_BOOTSTRAP_PASS)")
+		log.Println("  password: (set via TRICMS_BOOTSTRAP_PASSWORD)")
 	}
 	log.Println("========================================================")
 	return nil

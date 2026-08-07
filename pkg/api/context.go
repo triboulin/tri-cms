@@ -60,3 +60,28 @@ func APITokenFromContext(ctx context.Context) *storage.APIToken {
 	t, _ := ctx.Value(ctxAPIToken).(*storage.APIToken)
 	return t
 }
+
+// ActorIsGlobalAdmin reports whether the caller of this request has
+// global-admin-equivalent rights: either a session user with
+// IsGlobalAdmin, or any API token at all -- every token is global-admin
+// equivalent by design (see pkg/auth middleware and specs.md §1).
+func ActorIsGlobalAdmin(ctx context.Context) bool {
+	if u := UserFromContext(ctx); u != nil {
+		return u.IsGlobalAdmin
+	}
+	return APITokenFromContext(ctx) != nil
+}
+
+// ActorLogID returns an identifier for global_logs.user_id representing
+// whichever principal (session user or API token) authenticated this
+// request, or "" if neither is present (should not happen behind
+// requireIdentity/requireGlobalAdmin, but handlers stay defensive).
+func ActorLogID(ctx context.Context) string {
+	if u := UserFromContext(ctx); u != nil {
+		return u.ID
+	}
+	if t := APITokenFromContext(ctx); t != nil {
+		return "token:" + t.ID
+	}
+	return ""
+}

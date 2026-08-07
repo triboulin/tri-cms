@@ -47,35 +47,35 @@ func TestListProjects_ScopedToUser(t *testing.T) {
 	}
 }
 
-func TestDeleteProject_RequiresExactNameConfirmation(t *testing.T) {
+// TestDeleteProject_NoAPIRoute guards a deliberate design decision: unlike
+// every other resource, project deletion has no JSON API route at all --
+// not even for an admin session, and not for a token (which is
+// ADMIN-equivalent for everything else). The only way to delete a project is
+// the HTMX admin UI's double-confirmation flow (htmxAdminDeleteProject in
+// htmx_admin.go), which a script cannot drive by accident. See
+// pkg/api/router.go and pkg/api/handlers_projects.go for the removed-route
+// rationale.
+func TestDeleteProject_NoAPIRoute(t *testing.T) {
 	e := newTestEnv(t)
 	admin := e.createUser("admin3@x.com", true)
 	p := e.createProject("Sensitive Project")
 
-	rec := e.request(http.MethodDelete, "/api/v1/projects/"+p.ID, admin, deleteProjectRequest{ConfirmName: "wrong name"})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for mismatched confirm_name, got %d", rec.Code)
+	rec := e.request(http.MethodDelete, "/api/v1/projects/"+p.ID, admin, nil)
+	if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected DELETE /api/v1/projects/{id} to not exist (404/405), got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = e.request(http.MethodDelete, "/api/v1/projects/"+p.ID, admin, deleteProjectRequest{ConfirmName: "Sensitive Project"})
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	// Even a global-admin token, which is ADMIN-equivalent for every other
+	// action, cannot delete a project through the API either -- because the
+	// route simply doesn't exist to be authorized against.
+	tokenPlain := e.createToken(t, admin, "delete-test-token")
+	rec = e.requestWithToken(http.MethodDelete, "/api/v1/projects/"+p.ID, tokenPlain, nil)
+	if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected DELETE /api/v1/projects/{id} to not exist via token either, got %d", rec.Code)
 	}
 
-	if _, err := e.server.System.GetProject(bgCtx(), p.ID); err == nil {
-		t.Fatal("expected project to be deleted from system db")
-	}
-}
-
-func TestDeleteProject_NonAdminForbidden(t *testing.T) {
-	e := newTestEnv(t)
-	regular := e.createUser("user3@x.com", false)
-	p := e.createProject("P")
-	e.setRole(regular.ID, p.ID, "CONCEPTEUR")
-
-	rec := e.request(http.MethodDelete, "/api/v1/projects/"+p.ID, regular, deleteProjectRequest{ConfirmName: "P"})
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, even for CONCEPTEUR, got %d", rec.Code)
+	if _, err := e.server.System.GetProject(bgCtx(), p.ID); err != nil {
+		t.Fatalf("expected project to still exist (no API route can delete it), got err: %v", err)
 	}
 }
 

@@ -64,6 +64,24 @@ func TestMe_RequiresAuth(t *testing.T) {
 	}
 }
 
+// TestMe_ViaToken covers the third branch of handleMe (handlers_auth.go):
+// an API token identity, distinct from both "no auth" and a session user.
+// Every token is global-admin equivalent, so is_global_admin must be true.
+func TestMe_ViaToken(t *testing.T) {
+	e := newTestEnv(t)
+	admin := e.createUser("erin@example.com", true)
+	tok := e.createToken(t, admin, "me-test")
+
+	rec := e.requestWithToken(http.MethodGet, "/api/v1/me", tok, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	got := decodeBody[meTokenView](t, rec)
+	if got.AuthType != "token" || !got.IsGlobalAdmin || got.Name != "me-test" {
+		t.Fatalf("unexpected token identity view: %+v", got)
+	}
+}
+
 func TestLogout_ClearsCookie(t *testing.T) {
 	e := newTestEnv(t)
 	u := e.createUser("dave@example.com", false)

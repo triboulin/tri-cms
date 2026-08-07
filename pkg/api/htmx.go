@@ -57,10 +57,6 @@ func mountHTMXRoutes(r chi.Router, s *Server) {
 	r.Post("/projects/{projectID}/users/{userID}/role", s.htmxUpdateProjectUserRole)
 	r.Post("/projects/{projectID}/users/{userID}/remove", s.htmxRemoveProjectUser)
 
-	r.Get("/projects/{projectID}/tokens", s.htmxTokens)
-	r.Post("/projects/{projectID}/tokens/create", s.htmxCreateToken)
-	r.Post("/projects/{projectID}/tokens/{tokenID}/delete", s.htmxDeleteToken)
-
 	r.Get("/projects/{projectID}/webhooks", s.htmxWebhooks)
 	r.Post("/projects/{projectID}/webhooks/create", s.htmxCreateWebhook)
 	r.Post("/projects/{projectID}/webhooks/{webhookID}/update", s.htmxUpdateWebhook)
@@ -71,6 +67,9 @@ func mountHTMXRoutes(r chi.Router, s *Server) {
 	r.Get("/admin", s.htmxAdminRedirect)
 	r.Get("/admin/projects", s.htmxAdminProjects)
 	r.Post("/admin/projects/{projectID}/delete", s.htmxAdminDeleteProject)
+	r.Get("/admin/tokens", s.htmxAdminTokens)
+	r.Post("/admin/tokens/create", s.htmxAdminCreateToken)
+	r.Post("/admin/tokens/{tokenID}/delete", s.htmxAdminDeleteToken)
 	r.Get("/admin/users", s.htmxAdminUsers)
 	r.Post("/admin/users/create", s.htmxAdminCreateUser)
 	r.Post("/admin/users/{userID}/toggle-admin", s.htmxAdminToggleUserAdmin)

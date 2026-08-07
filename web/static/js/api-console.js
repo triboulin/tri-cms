@@ -1,12 +1,18 @@
-// Short interactive API documentation on the Tokens page: clicking a row in
-// the quick-reference tables preloads the try-it console (method/path/body),
-// and "Envoyer" fires a real request against this project's API -- using the
-// current browser session by default (the same authenticate() middleware
-// accepts either a session cookie or a Bearer token), or the token typed
-// into the Jeton field to simulate an external API client.
+// Short interactive API documentation on the global Administration > API
+// page: clicking a row in the quick-reference tables preloads the try-it
+// console (method/path/body), and "Envoyer" fires a real request -- using
+// the current browser session by default (the same authenticate()
+// middleware accepts either a session cookie or a Bearer token), or the
+// token typed into the Jeton field to simulate an external API client.
+// Endpoints are documented with a literal "{project_id}" placeholder in
+// their path (the console is no longer scoped to one project, since tokens
+// are global now): the "ID de projet" field's value is substituted in for
+// every occurrence right before the request is sent, so the reference
+// tables can stay project-agnostic while still being directly runnable.
 (function () {
   var methodSel = document.getElementById('api-console-method');
   var pathInput = document.getElementById('api-console-path');
+  var projectIdInput = document.getElementById('api-console-project-id');
   var tokenInput = document.getElementById('api-console-token');
   var bodyInput = document.getElementById('api-console-body');
   var sendBtn = document.getElementById('api-console-send');
@@ -30,6 +36,8 @@
     var method = methodSel.value;
     var path = pathInput.value.trim();
     if (!path) return;
+    var projectId = projectIdInput ? projectIdInput.value.trim() : '';
+    if (projectId) path = path.split('{project_id}').join(projectId);
 
     var headers = { Accept: 'application/json' };
     var token = tokenInput.value.trim();

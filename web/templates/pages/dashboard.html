@@ -19,20 +19,10 @@
       </div>
       {{end}}
 
-      <div class="tri-section-title">
-        <h2><span class="material-icons" aria-hidden="true">table_view</span> Mes projets</h2>
-      </div>
       {{if not .Projects}}
-        <p class="tri-empty">Aucun projet accessible pour le moment.</p>
+        <p class="tri-empty">Aucun projet accessible pour le moment.{{if not .User.IsGlobalAdmin}} Contactez un administrateur pour obtenir un accès.{{end}}</p>
       {{else}}
-        <div class="tri-grid">
-        {{range .Projects}}
-          <div class="tri-card">
-            <h3><span class="material-icons" aria-hidden="true">folder_open</span> {{.Name}}</h3>
-            <a class="tri-btn tri-btn-sm" href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">arrow_forward</span> Ouvrir</a>
-          </div>
-        {{end}}
-        </div>
+        <p class="tri-empty">Retrouvez vos projets dans le menu déroulant en haut à gauche.</p>
       {{end}}
     </div>
   </div>

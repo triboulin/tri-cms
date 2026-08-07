@@ -18,8 +18,23 @@ func toProjectView(p *storage.Project) projectView {
 }
 
 // handleListProjects returns every project the caller may access: all of
-// them for a global admin, only permissioned ones otherwise (spec §1).
+// them for a global admin or an API token (every token is global-admin
+// equivalent), only permissioned ones for a regular session user (spec §1).
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
+	if APITokenFromContext(r.Context()) != nil {
+		projects, err := s.System.ListProjects(r.Context())
+		if err != nil {
+			writeStorageError(w, err)
+			return
+		}
+		out := make([]projectView, 0, len(projects))
+		for _, p := range projects {
+			out = append(out, toProjectView(p))
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+
 	user := UserFromContext(r.Context())
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "authentication required")
@@ -66,42 +81,13 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := UserFromContext(r.Context())
-	_ = s.System.LogAction(r.Context(), user.ID, proj.ID, "project.create", map[string]string{"name": proj.Name})
+	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), proj.ID, "project.create", map[string]string{"name": proj.Name})
 	writeJSON(w, http.StatusCreated, toProjectView(proj))
 }
 
-type deleteProjectRequest struct {
-	ConfirmName string `json:"confirm_name"`
-}
-
-// handleDeleteProject irreversibly deletes a project and all of its data.
-// Per spec §4.3, this requires the caller to re-type the project's exact
-// name as an explicit double-confirmation. Global-admin only.
-func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
-	project := ProjectFromContext(r.Context())
-
-	var req deleteProjectRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if req.ConfirmName != project.Name {
-		writeError(w, http.StatusBadRequest, "confirm_name must match the exact project name")
-		return
-	}
-
-	s.forgetProjectDB(project.ID)
-	if err := s.Manager.DeleteProjectStorage(project.ID); err != nil {
-		writeStorageError(w, err)
-		return
-	}
-	if err := s.System.DeleteProject(r.Context(), project.ID); err != nil {
-		writeStorageError(w, err)
-		return
-	}
-
-	user := UserFromContext(r.Context())
-	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "project.delete", map[string]string{"name": project.Name})
-	w.WriteHeader(http.StatusNoContent)
-}
+// Note: there is deliberately no handleDeleteProject / DELETE route in the
+// JSON API. Project deletion is irreversible and destructive enough that it
+// should never be one scripted API call away by mistake -- it's reachable
+// only through the HTMX admin UI (see htmxAdminDeleteProject in
+// htmx_admin.go), which forces the caller to re-type the project's exact
+// name as an explicit double confirmation.

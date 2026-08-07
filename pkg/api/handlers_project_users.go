@@ -46,7 +46,6 @@ type assignProjectUserRequest struct {
 // CONCEPTEUR, which is reserved for ADMIN via the global rights matrix.
 func (s *Server) handleAssignProjectUser(w http.ResponseWriter, r *http.Request) {
 	project := ProjectFromContext(r.Context())
-	actor := UserFromContext(r.Context())
 	actorRole := ProjectRoleFromContext(r.Context())
 
 	var req assignProjectUserRequest
@@ -58,7 +57,7 @@ func (s *Server) handleAssignProjectUser(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid role")
 		return
 	}
-	if !auth.CanAssignRole(actor.IsGlobalAdmin, actorRole, req.Role) {
+	if !auth.CanAssignRole(ActorIsGlobalAdmin(r.Context()), actorRole, req.Role) {
 		writeError(w, http.StatusForbidden, "forbidden: cannot assign this role")
 		return
 	}
@@ -78,7 +77,7 @@ func (s *Server) handleAssignProjectUser(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_ = s.System.LogAction(r.Context(), actor.ID, project.ID, "project_permission.set", map[string]string{
+	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "project_permission.set", map[string]string{
 		"target_user": target.ID, "role": string(req.Role),
 	})
 	writeJSON(w, http.StatusOK, projectPermissionView{UserID: target.ID, Email: target.Email, Role: req.Role})
@@ -90,7 +89,6 @@ func (s *Server) handleAssignProjectUser(w http.ResponseWriter, r *http.Request)
 // CONCEPTEUR's permission row).
 func (s *Server) handleRemoveProjectUser(w http.ResponseWriter, r *http.Request) {
 	project := ProjectFromContext(r.Context())
-	actor := UserFromContext(r.Context())
 	actorRole := ProjectRoleFromContext(r.Context())
 	targetUserID := chi.URLParam(r, "userID")
 
@@ -99,7 +97,7 @@ func (s *Server) handleRemoveProjectUser(w http.ResponseWriter, r *http.Request)
 		writeStorageError(w, err)
 		return
 	}
-	if !auth.CanAssignRole(actor.IsGlobalAdmin, actorRole, existing.Role) {
+	if !auth.CanAssignRole(ActorIsGlobalAdmin(r.Context()), actorRole, existing.Role) {
 		writeError(w, http.StatusForbidden, "forbidden: cannot manage this user's role")
 		return
 	}
@@ -108,6 +106,6 @@ func (s *Server) handleRemoveProjectUser(w http.ResponseWriter, r *http.Request)
 		writeStorageError(w, err)
 		return
 	}
-	_ = s.System.LogAction(r.Context(), actor.ID, project.ID, "project_permission.delete", map[string]string{"target_user": targetUserID})
+	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "project_permission.delete", map[string]string{"target_user": targetUserID})
 	w.WriteHeader(http.StatusNoContent)
 }

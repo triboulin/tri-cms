@@ -56,9 +56,14 @@ type ProjectPermission struct {
 	Role      Role   `json:"role"`
 }
 
+// APIToken is now always a global, ADMIN-equivalent credential (see
+// pkg/auth middleware): ProjectID is retained only for backward
+// compatibility with rows created before this change and is always nil
+// for tokens minted going forward. Tokens are managed exclusively from the
+// Administration area, not from a project's own settings.
 type APIToken struct {
 	ID        string    `json:"id"`
-	ProjectID string    `json:"project_id"`
+	ProjectID *string   `json:"project_id,omitempty"`
 	TokenHash string    `json:"-"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`

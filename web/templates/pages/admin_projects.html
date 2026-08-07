@@ -8,14 +8,7 @@
     <div class="tri-content">
       {{template "partial:flash" .}}
 
-      <div class="tri-card" id="create">
-        <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau projet</h3>
-        <form class="tri-form" method="post" action="/projects/create">
-          <label>Nom du projet</label>
-          <input type="text" name="name" placeholder="ex: Site vitrine Actimium" required>
-          <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Créer le projet</button>
-        </form>
-      </div>
+      <p class="tri-empty">Pour créer un projet, utilisez « Nouveau projet » depuis l'accueil (<a href="/#create">accéder</a>).</p>
 
       <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">folder</span> Projets existants</h2></div>
       {{if not .Content.Projects}}

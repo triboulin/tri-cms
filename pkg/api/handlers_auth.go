@@ -82,13 +82,27 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleMe returns the currently authenticated user, useful for the
-// front-end to bootstrap its session state.
+// meTokenView is what GET /me returns when authenticated via API token
+// rather than a session: there's no storage.User record to describe, but
+// callers (scripts, the tricms-setup utility) can still use this to sanity
+// check that their token is valid and confirm it's admin-equivalent.
+type meTokenView struct {
+	AuthType      string `json:"auth_type"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	IsGlobalAdmin bool   `json:"is_global_admin"`
+}
+
+// handleMe returns the currently authenticated identity, useful for the
+// front-end (or an external script) to bootstrap its session/token state.
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	user := UserFromContext(r.Context())
-	if user == nil {
-		writeError(w, http.StatusUnauthorized, "authentication required")
+	if user := UserFromContext(r.Context()); user != nil {
+		writeJSON(w, http.StatusOK, toUserView(user))
 		return
 	}
-	writeJSON(w, http.StatusOK, toUserView(user))
+	if tok := APITokenFromContext(r.Context()); tok != nil {
+		writeJSON(w, http.StatusOK, meTokenView{AuthType: "token", ID: tok.ID, Name: tok.Name, IsGlobalAdmin: true})
+		return
+	}
+	writeError(w, http.StatusUnauthorized, "authentication required")
 }

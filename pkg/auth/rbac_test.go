@@ -46,7 +46,6 @@ func TestCanAccessSection(t *testing.T) {
 		{"gestionnaire cannot see conception", false, roleRef(storage.RoleGestionnaire), SectionConception, false},
 		{"concepteur sees conception", false, roleRef(storage.RoleConcepteur), SectionConception, true},
 		{"concepteur sees users (inherits gestionnaire)", false, roleRef(storage.RoleConcepteur), SectionUsers, true},
-		{"concepteur cannot see api (admin only)", false, roleRef(storage.RoleConcepteur), SectionAPI, false},
 		{"concepteur cannot see webhooks (admin only)", false, roleRef(storage.RoleConcepteur), SectionWebhooks, false},
 		{"no relation to project sees nothing", false, nil, SectionCollections, false},
 	}

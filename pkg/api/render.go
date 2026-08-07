@@ -20,7 +20,6 @@ type SidebarVisibility struct {
 	Collections bool
 	Medias      bool
 	Users       bool
-	API         bool
 	Webhooks    bool
 	Logs        bool
 }
@@ -36,8 +35,10 @@ type NavItem struct {
 }
 
 // projectSectionCatalog lists the level-2 breadcrumb siblings for a project
-// (Conception / Collections / Médias / Utilisateurs / API / Webhooks),
-// filtered by what the current user/role may access.
+// (Conception / Collections / Médias / Utilisateurs / Webhooks), filtered
+// by what the current user/role may access. API tokens moved out of the
+// project scope entirely into Administration (see adminSectionCatalog) --
+// tokens are global and ADMIN-equivalent now, not per-project.
 func projectSectionCatalog(project *storage.Project, sidebar SidebarVisibility, activeKey string) []NavItem {
 	if project == nil {
 		return nil
@@ -54,19 +55,22 @@ func projectSectionCatalog(project *storage.Project, sidebar SidebarVisibility, 
 	add("collections", "Collections", "table_view", "", sidebar.Collections)
 	add("medias", "Médias", "perm_media", "/medias", sidebar.Medias)
 	add("users", "Utilisateurs", "group", "/users", sidebar.Users)
-	add("api", "API", "vpn_key", "/tokens", sidebar.API)
 	add("webhooks", "Webhooks", "webhook", "/webhooks", sidebar.Webhooks)
 	add("logs", "Logs", "history", "/logs", sidebar.Logs)
 	return items
 }
 
 // adminSectionCatalog lists the level-2 breadcrumb siblings inside the
-// global Administration area (Projets / Comptes / Matrice des droits).
-// Logs used to live here too, but the audit trail is project-scoped now
-// (still admin-only) -- see projectSectionCatalog / SectionLogs instead.
+// global Administration area (Projets / API / Comptes / Matrice des
+// droits). Logs used to live here too, but the audit trail is
+// project-scoped now (still admin-only) -- see projectSectionCatalog /
+// SectionLogs instead. API tokens moved here from the project scope: every
+// token is global-admin equivalent now, so it belongs alongside the other
+// global-only concerns rather than under a specific project.
 func adminSectionCatalog(activeKey string) []NavItem {
 	return []NavItem{
 		{Key: "admin_projects", Label: "Projets", Icon: "folder", URL: "/admin/projects", Active: activeKey == "admin_projects"},
+		{Key: "admin_tokens", Label: "API", Icon: "vpn_key", URL: "/admin/tokens", Active: activeKey == "admin_tokens"},
 		{Key: "admin_users", Label: "Comptes", Icon: "group", URL: "/admin/users", Active: activeKey == "admin_users"},
 		{Key: "admin_permissions", Label: "Matrice des droits", Icon: "rule", URL: "/admin/permissions", Active: activeKey == "admin_permissions"},
 	}
@@ -124,7 +128,6 @@ func (s *Server) buildPageData(ctx context.Context, user *storage.User, project 
 		Collections: project != nil && auth.CanAccessSection(user.IsGlobalAdmin, role, auth.SectionCollections),
 		Medias:      project != nil && auth.CanAccessSection(user.IsGlobalAdmin, role, auth.SectionMedias),
 		Users:       project != nil && auth.CanAccessSection(user.IsGlobalAdmin, role, auth.SectionUsers),
-		API:         project != nil && auth.CanAccessSection(user.IsGlobalAdmin, role, auth.SectionAPI),
 		Webhooks:    project != nil && auth.CanAccessSection(user.IsGlobalAdmin, role, auth.SectionWebhooks),
 		Logs:        project != nil && auth.CanAccessSection(user.IsGlobalAdmin, role, auth.SectionLogs),
 	}

@@ -72,49 +72,53 @@ func TestHTMX_MediaUploadAndDelete(t *testing.T) {
 	}
 }
 
-// TestHTMX_TokensPage_PlainGetDoesNotCrash guards against a regression where
-// the template unconditionally read .Content.RevealedToken, a field that
-// only existed on the Content struct built right after a create -- a plain
-// GET (the common case, listing existing tokens) used a different struct
-// without that field and crashed with a 500.
-func TestHTMX_TokensPage_PlainGetDoesNotCrash(t *testing.T) {
+// TestHTMX_AdminTokensPage_PlainGetDoesNotCrash guards against a regression
+// where the template unconditionally read .Content.RevealedToken, a field
+// that only existed on the Content struct built right after a create -- a
+// plain GET (the common case, listing existing tokens) used a different
+// struct without that field and crashed with a 500. Tokens moved to
+// Administration (spec §1, §4.3): the page is /admin/tokens now, no longer
+// scoped under a project.
+func TestHTMX_AdminTokensPage_PlainGetDoesNotCrash(t *testing.T) {
 	e := newHTMXTestEnv(t)
 	admin := e.createUser("ht0@x.com", true)
-	p := e.createProject("HTMXTokensPlainGet")
 
-	rec := e.getHTML("/projects/"+p.ID+"/tokens", admin)
+	rec := e.getHTML("/admin/tokens", admin)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on plain tokens GET, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
-// TestHTMX_TokensPage_InteractiveAPIDocs guards the short interactive API
-// documentation on the tokens page: a try-it console plus a quick-reference
-// table of real, project-scoped endpoint paths.
-func TestHTMX_TokensPage_InteractiveAPIDocs(t *testing.T) {
+// TestHTMX_AdminTokensPage_InteractiveAPIDocs guards the short interactive
+// API documentation on the global Administration > API page: a try-it
+// console plus a quick-reference table of endpoint paths. Paths are
+// project-agnostic now (a literal "{project_id}" placeholder), since the
+// page -- and every token it mints -- is no longer scoped to one project.
+func TestHTMX_AdminTokensPage_InteractiveAPIDocs(t *testing.T) {
 	e := newHTMXTestEnv(t)
 	admin := e.createUser("htd0@x.com", true)
-	p := e.createProject("HTMXTokensDocs")
 
-	rec := e.getHTML("/projects/"+p.ID+"/tokens", admin)
+	rec := e.getHTML("/admin/tokens", admin)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
 		`id="api-console-method"`, `id="api-console-path"`, `id="api-console-send"`,
+		`id="api-console-project-id"`,
 		`class="tri-api-doc-row"`,
-		`/api/v1/projects/` + p.ID + `/schemas`,
-		`/api/v1/projects/` + p.ID + `/contents/{slug}`,
+		`/api/v1/projects/{project_id}/schemas`,
+		`/api/v1/projects/{project_id}/contents/{slug}`,
+		`/api/v1/tokens`,
 		`/static/js/api-console.js`,
 	} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("expected tokens page to contain %q, got:\n%s", want, body)
+			t.Fatalf("expected admin tokens page to contain %q, got:\n%s", want, body)
 		}
 	}
 }
 
-func TestHTMX_TokensCreateAndDelete(t *testing.T) {
+func TestHTMX_AdminTokensCreateAndDelete(t *testing.T) {
 	e := newHTMXTestEnv(t)
 	admin := e.createUser("ht1@x.com", true)
 	concepteur := e.createUser("ht2@x.com", false)
@@ -122,12 +126,12 @@ func TestHTMX_TokensCreateAndDelete(t *testing.T) {
 	e.setRole(concepteur.ID, p.ID, storage.RoleConcepteur)
 
 	// Non-admin forbidden (tokens are ADMIN-only per spec §1).
-	rec := e.postForm("/projects/"+p.ID+"/tokens/create", concepteur, url.Values{"name": {"CI"}})
+	rec := e.postForm("/admin/tokens/create", concepteur, url.Values{"name": {"CI"}})
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", rec.Code)
 	}
 
-	rec = e.postForm("/projects/"+p.ID+"/tokens/create", admin, url.Values{"name": {"CI"}})
+	rec = e.postForm("/admin/tokens/create", admin, url.Values{"name": {"CI"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 (reveal page, not a redirect), got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -135,16 +139,16 @@ func TestHTMX_TokensCreateAndDelete(t *testing.T) {
 		t.Fatalf("expected plaintext token revealed once, got %s", rec.Body.String())
 	}
 
-	tokens, err := e.server.System.ListAPITokens(bgCtx(), p.ID)
+	tokens, err := e.server.System.ListAPITokens(bgCtx())
 	if err != nil || len(tokens) != 1 {
 		t.Fatalf("expected 1 token persisted: %v (%d)", err, len(tokens))
 	}
 
-	rec = e.postForm("/projects/"+p.ID+"/tokens/"+tokens[0].ID+"/delete", admin, url.Values{})
+	rec = e.postForm("/admin/tokens/"+tokens[0].ID+"/delete", admin, url.Values{})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("expected redirect, got %d", rec.Code)
 	}
-	tokens, _ = e.server.System.ListAPITokens(bgCtx(), p.ID)
+	tokens, _ = e.server.System.ListAPITokens(bgCtx())
 	if len(tokens) != 0 {
 		t.Fatalf("expected token revoked, got %d", len(tokens))
 	}
