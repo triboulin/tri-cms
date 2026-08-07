@@ -27,6 +27,7 @@ func main() {
 	dataDir := envOr("TRICMS_DATA_DIR", "./data")
 	addr := envOr("TRICMS_ADDR", ":8080")
 	jwtSecret := os.Getenv("TRICMS_JWT_SECRET")
+	encryptionKey := os.Getenv("TRICMS_ENCRYPTION_KEY")
 
 	if err := os.MkdirAll(dataDir, 0o750); err != nil {
 		log.Fatalf("create data directory: %v", err)
@@ -42,6 +43,17 @@ func main() {
 		log.Println("Sessions will be invalidated on restart. Set TRICMS_JWT_SECRET for production.")
 	}
 
+	if encryptionKey == "" {
+		generated, err := randomSecret()
+		if err != nil {
+			log.Fatalf("generate encryption key: %v", err)
+		}
+		encryptionKey = generated
+		log.Println("WARNING: TRICMS_ENCRYPTION_KEY is not set; using an ephemeral key.")
+		log.Println("Secrets stored in github_dispatch webhooks (GitHub tokens) will become")
+		log.Println("undecryptable on restart. Set TRICMS_ENCRYPTION_KEY for production.")
+	}
+
 	system, err := storage.OpenSystemDB(dataDir + "/system.db")
 	if err != nil {
 		log.Fatalf("open system database: %v", err)
@@ -55,7 +67,13 @@ func main() {
 		log.Fatalf("init token issuer: %v", err)
 	}
 
+	encryptor, err := auth.NewEncryptor(auth.DeriveKey(encryptionKey))
+	if err != nil {
+		log.Fatalf("init encryptor: %v", err)
+	}
+
 	dispatcher := webhooks.NewDispatcher()
+	dispatcher.Decryptor = encryptor
 
 	templates, err := template.ParseFS(web.FS, "templates/*.html", "templates/pages/*.html")
 	if err != nil {
@@ -68,6 +86,7 @@ func main() {
 
 	server := api.NewServer(system, manager, issuer, dispatcher, templates)
 	server.StaticFS = staticFS
+	server.Encryptor = encryptor
 	if maxUploadMB := os.Getenv("TRICMS_MAX_UPLOAD_MB"); maxUploadMB != "" {
 		if mb, err := strconv.ParseInt(maxUploadMB, 10, 64); err == nil && mb > 0 {
 			server.MaxUploadSize = mb << 20

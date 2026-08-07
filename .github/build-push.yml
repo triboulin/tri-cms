@@ -1,0 +1,37 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+concurrency:
+  group: build-push-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dockerpush:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to registry
+        uses: docker/login-action@v2
+        with:
+          registry: registry.triboulin.fr
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            registry.triboulin.fr/tri-cms:${{ github.ref_name }}
+            registry.triboulin.fr/tri-cms:latest

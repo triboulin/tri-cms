@@ -72,8 +72,10 @@ CREATE TABLE api_tokens (
 CREATE TABLE webhooks (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
-    url TEXT NOT NULL,
-    secret TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'generic', -- 'generic' | 'github_dispatch'
+    url TEXT NOT NULL DEFAULT '',         -- kind=generic uniquement
+    secret TEXT NOT NULL DEFAULT '',      -- kind=generic uniquement (HMAC)
+    config TEXT,                          -- kind=github_dispatch uniquement, JSON {owner, repo, token}
     events TEXT NOT NULL, -- Liste JSON des évènements (ex: ["content.create", "content.update"])
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -93,6 +95,9 @@ CREATE TABLE global_logs (
 > - `password_hash` doit être généré avec un algorithme de hachage lent (bcrypt ou argon2id), jamais MD5/SHA seul.
 > - `api_tokens.token_hash` : le token en clair n'est affiché qu'une seule fois à la création ; seul son hash est persisté.
 > - `global_logs.action` suit une convention `<ressource>.<verbe>` (ex : `project.create`, `user.suspend`) cohérente avec `webhooks.events`.
+> - `webhooks.kind` distingue deux mécanismes de livraison, tous deux couverts par la même politique de retry/backoff (`pkg/webhooks.Dispatcher`) :
+>   - `generic` (défaut) : POST signé (HMAC-SHA256, header `X-TriCMS-Signature: sha256=<hex>`) vers `webhooks.url`, avec `webhooks.secret` en clair.
+>   - `github_dispatch` : déclenche `POST https://api.github.com/repos/{owner}/{repo}/dispatches` (`repository_dispatch`) au lieu d'une URL arbitraire — pensé pour republier un site statique (ex: SvelteKit/Cloudflare Pages) dès qu'un contenu est publié, sans relais intermédiaire. `webhooks.config` est un JSON `{"owner", "repo", "token"}` ; `token` (PAT GitHub) y est chiffré au repos (AES-256-GCM, `pkg/auth.Encryptor`, clé dérivée de `TRICMS_ENCRYPTION_KEY`) et n'est jamais renvoyé en clair par l'API ou l'IHM une fois stocké.
 
 ### 2.2 Base Projet (`./data/projects/{project_id}/client.db`)
 
