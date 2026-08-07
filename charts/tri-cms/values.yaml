@@ -60,14 +60,17 @@ persistence:
   accessModes:
     - ReadWriteOnce
 
-# Variables d'environnement runtime de l'app. TRICMS_JWT_SECRET et
-# TRICMS_ENCRYPTION_KEY sont nécessaires en production : sans elles, tricms
-# génère des valeurs éphémères à chaque démarrage (voir cmd/tricms/main.go),
-# ce qui déconnecte tous les utilisateurs et rend les secrets de webhooks
-# chiffrés illisibles à chaque redéploiement. Passées via --set depuis les
-# secrets GitHub Actions du même nom, jamais en dur ici.
+# Variables d'environnement runtime de l'app. TRICMS_ENCRYPTION_KEY est
+# nécessaire en production : sans elle, tricms génère une valeur éphémère à
+# chaque démarrage (voir cmd/tricms/main.go), ce qui déconnecte tous les
+# utilisateurs (le secret de signature JWT en est dérivé) et rend les
+# secrets de webhooks chiffrés illisibles à chaque redéploiement. Passée
+# via --set depuis les secrets GitHub Actions du même nom, jamais en dur ici.
 env:
-  TRICMS_JWT_SECRET: ""
   TRICMS_ENCRYPTION_KEY: ""
   TRICMS_BOOTSTRAP_EMAIL: ""
   TRICMS_BOOTSTRAP_PASSWORD: ""
+  # Optionnel : limite de taille d'upload en Mo (voir cmd/tricms/main.go).
+  # Non sensible, donc passée en var.TRICMS_MAX_UPLOAD_MB depuis la CI plutôt
+  # qu'en secret.
+  TRICMS_MAX_UPLOAD_MB: ""

@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="web/static/img/logo.svg" alt="triCMS logo" width="128" height="128">
+  <img src="web/static/img/logo.svg" alt="triCMS logo" width="200" height="200">
 </p>
-
-<h1 align="center">triCMS</h1>
 
 CMS headless multi-tenant écrit en Go, implémentant la spécification `specs.md` :
 RBAC à deux niveaux (ADMIN global + rôles projet cumulatifs), isolation SQLite
@@ -13,11 +11,11 @@ rendue côté serveur, et webhooks avec retries (livraison signée générique, 
 ## Démarrage rapide
 
 ```bash
-go build -o tricms ./cmd/tricms && TRICMS_JWT_SECRET="change-me-in-production" && TRICMS_ENCRYPTION_KEY="change-me-in-production" && ./tricms
+go build -o tricms ./cmd/tricms && TRICMS_ENCRYPTION_KEY="changeme4prd" && ./tricms
 ```
 ou sur Windows  :
 ```cmd
-set TRICMS_JWT_SECRET="change-me-in-production" && set TRICMS_ENCRYPTION_KEY="change-me-in-production" && go build -o tricms.exe ./cmd/tricms && .\tricms.exe
+set TRICMS_ENCRYPTION_KEY="changeme4prd" && go build -o tricms.exe ./cmd/tricms && .\tricms.exe
 ```
 
 
@@ -27,10 +25,9 @@ Variables d'environnement :
 |---|---|---|
 | `TRICMS_ADDR` | `:8080` | Adresse d'écoute HTTP |
 | `TRICMS_DATA_DIR` | `./data` | Racine de `system.db` et `./data/projects/{id}/` |
-| `TRICMS_JWT_SECRET` | *(généré, éphémère)* | Clé de signature des sessions JWT — à fixer en production |
-| `TRICMS_ENCRYPTION_KEY` | *(généré, éphémère)* | Clé de chiffrement (AES-256-GCM) des secrets stockés en base — actuellement le token GitHub des webhooks `kind=github_dispatch`. À fixer en production, sinon ces tokens deviennent indéchiffrables au redémarrage. |
+| `TRICMS_ENCRYPTION_KEY` | *(généré, éphémère)* | Clé de chiffrement (AES-256-GCM) des secrets stockés en base — actuellement le token GitHub des webhooks `kind=github_dispatch` — et source de dérivation de la clé de signature des sessions JWT. À fixer en production, sinon les sessions sont invalidées et ces tokens deviennent indéchiffrables à chaque redémarrage. |
 | `TRICMS_BOOTSTRAP_EMAIL` | `admin@tricms.local` | Email du premier compte ADMIN créé automatiquement si `system.db` est vide |
-| `TRICMS_BOOTSTRAP_PASS` | *(généré aléatoirement)* | Mot de passe du premier compte ADMIN — optionnel, sinon un mot de passe est généré et affiché une seule fois dans les logs |
+| `TRICMS_BOOTSTRAP_PASSWORD` | *(généré aléatoirement)* | Mot de passe du premier compte ADMIN — optionnel, sinon un mot de passe est généré et affiché une seule fois dans les logs |
 
 Au premier démarrage sans utilisateur existant, un compte **ADMIN** est créé
 automatiquement ; l'email et le mot de passe généré sont affichés une seule
@@ -78,17 +75,6 @@ web/              templates HTML (embed.FS) + assets statiques (CSS, HTMX via CD
 go test ./pkg/... -cover
 ```
 
-Couverture par package (dernière exécution) :
-
-| Package | Couverture |
-|---|---|
-| `pkg/webhooks` | ~93 % |
-| `pkg/auth` | ~92 % |
-| `pkg/schema` | ~89 % |
-| `pkg/storage` | ~81 % |
-| `pkg/api` | ~72 % |
-| **Total `pkg/...`** | **~76 %** |
-
 La cible de la spec (§5) est 90 %. L'essentiel des chemins fonctionnels et
 de sécurité (RBAC, validation de schéma, isolation multi-tenant, retries
 webhooks, chiffrement/déchiffrement des secrets de webhook) est testé ; le
@@ -101,13 +87,3 @@ HTMX) : le nouveau code est lui-même testé à 70-100 % selon les fonctions,
 mais dilue la moyenne du paquet le temps que la couverture d'ensemble
 rattrape sa taille. `cmd/tricms` (wiring pur, sans tests) est validé par un
 test de fumée manuel (démarrage réel + requêtes HTTP).
-
-## Limites connues / pistes d'évolution
-
-- L'IHM HTMX couvre la structure de navigation complète du §4 (fil d'Ariane,
-  sélecteur de projet, sidebar conditionnelle par rôle, vues Administration
-  et Utilisateurs Projet) en lecture ; les formulaires de création/édition
-  avancés restent à construire par-dessus l'API JSON déjà fonctionnelle.
-- La vérification d'unicité des champs `Slug` au niveau contenu est en
-  O(n) sur le nombre de contenus du schéma (acceptable au vu du volume
-  attendu d'un CMS mono-instance, à revoir si besoin d'indexation dédiée).

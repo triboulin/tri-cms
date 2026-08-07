@@ -85,10 +85,10 @@ jobs:
             --set registry.username=${{ secrets.REGISTRY_USERNAME }} \
             --set registry.password=${{ secrets.REGISTRY_PASSWORD }} \
             --set ingress.host=cms.triboulin.fr \
-            --set env.TRICMS_JWT_SECRET=${{ secrets.TRICMS_JWT_SECRET }} \
             --set env.TRICMS_ENCRYPTION_KEY=${{ secrets.TRICMS_ENCRYPTION_KEY }} \
             --set env.TRICMS_BOOTSTRAP_EMAIL=${{ secrets.TRICMS_BOOTSTRAP_EMAIL }} \
             --set env.TRICMS_BOOTSTRAP_PASSWORD=${{ secrets.TRICMS_BOOTSTRAP_PASSWORD }} \
+            --set env.TRICMS_MAX_UPLOAD_MB=${{ vars.TRICMS_MAX_UPLOAD_MB }} \
             --atomic --wait \
             --namespace triboulin-fr \
             --create-namespace

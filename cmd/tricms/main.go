@@ -26,21 +26,10 @@ import (
 func main() {
 	dataDir := envOr("TRICMS_DATA_DIR", "./data")
 	addr := envOr("TRICMS_ADDR", ":8080")
-	jwtSecret := os.Getenv("TRICMS_JWT_SECRET")
 	encryptionKey := os.Getenv("TRICMS_ENCRYPTION_KEY")
 
 	if err := os.MkdirAll(dataDir, 0o750); err != nil {
 		log.Fatalf("create data directory: %v", err)
-	}
-
-	if jwtSecret == "" {
-		generated, err := randomSecret()
-		if err != nil {
-			log.Fatalf("generate session secret: %v", err)
-		}
-		jwtSecret = generated
-		log.Println("WARNING: TRICMS_JWT_SECRET is not set; using an ephemeral secret.")
-		log.Println("Sessions will be invalidated on restart. Set TRICMS_JWT_SECRET for production.")
 	}
 
 	if encryptionKey == "" {
@@ -50,8 +39,9 @@ func main() {
 		}
 		encryptionKey = generated
 		log.Println("WARNING: TRICMS_ENCRYPTION_KEY is not set; using an ephemeral key.")
-		log.Println("Secrets stored in github_dispatch webhooks (GitHub tokens) will become")
-		log.Println("undecryptable on restart. Set TRICMS_ENCRYPTION_KEY for production.")
+		log.Println("Sessions will be invalidated and secrets stored in github_dispatch")
+		log.Println("webhooks (GitHub tokens) will become undecryptable on restart.")
+		log.Println("Set TRICMS_ENCRYPTION_KEY for production.")
 	}
 
 	system, err := storage.OpenSystemDB(dataDir + "/system.db")
@@ -62,7 +52,7 @@ func main() {
 
 	manager := storage.NewManager(dataDir)
 
-	issuer, err := auth.NewTokenIssuer([]byte(jwtSecret), 24*time.Hour)
+	issuer, err := auth.NewTokenIssuer(auth.DeriveJWTSecret(encryptionKey), 24*time.Hour)
 	if err != nil {
 		log.Fatalf("init token issuer: %v", err)
 	}

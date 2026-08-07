@@ -77,3 +77,12 @@ func DeriveKey(secret string) []byte {
 	sum := sha256.Sum256([]byte(secret))
 	return sum[:]
 }
+
+// DeriveJWTSecret derives the JWT session-signing key from the same
+// passphrase as DeriveKey (TRICMS_ENCRYPTION_KEY), so operators only manage
+// one secret. A distinct domain-separation label keeps the AES key and the
+// HMAC key from ever being identical byte-for-byte.
+func DeriveJWTSecret(secret string) []byte {
+	sum := sha256.Sum256([]byte("tricms-jwt-signing:" + secret))
+	return sum[:]
+}
