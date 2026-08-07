@@ -45,8 +45,10 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 CREATE TABLE IF NOT EXISTS webhooks (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
-    url TEXT NOT NULL,
-    secret TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'generic',
+    url TEXT NOT NULL DEFAULT '',
+    secret TEXT NOT NULL DEFAULT '',
+    config TEXT,
     events TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -85,7 +87,34 @@ func OpenSystemDB(dsn string) (*SystemDB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate system db: %w", err)
 	}
+	if err := migrateWebhookColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate system db: %w", err)
+	}
 	return &SystemDB{db: db}, nil
+}
+
+// migrateWebhookColumns adds the kind/config columns to pre-existing
+// webhooks tables (from before the github_dispatch webhook kind existed).
+// CREATE TABLE IF NOT EXISTS above only applies to brand-new databases, so
+// this ALTER TABLE step keeps already-deployed system.db files working
+// without a manual migration step. Safe to run on every startup: ALTER
+// TABLE ADD COLUMN fails harmlessly with "duplicate column name" once the
+// columns already exist.
+func migrateWebhookColumns(db *sql.DB) error {
+	stmts := []string{
+		`ALTER TABLE webhooks ADD COLUMN kind TEXT NOT NULL DEFAULT 'generic'`,
+		`ALTER TABLE webhooks ADD COLUMN config TEXT`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 func dsnFor(dsn string) string {
@@ -377,22 +406,25 @@ func (s *SystemDB) CreateWebhook(ctx context.Context, w *Webhook) error {
 	if err != nil {
 		return err
 	}
+	if w.Kind == "" {
+		w.Kind = "generic"
+	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO webhooks (id, project_id, url, secret, events) VALUES (?, ?, ?, ?, ?)`,
-		w.ID, w.ProjectID, w.URL, w.Secret, string(events))
+		`INSERT INTO webhooks (id, project_id, kind, url, secret, config, events) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		w.ID, w.ProjectID, w.Kind, w.URL, w.Secret, nullable(w.Config), string(events))
 	return err
 }
 
 func (s *SystemDB) GetWebhook(ctx context.Context, id string) (*Webhook, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, project_id, url, secret, events, created_at FROM webhooks WHERE id = ?`, id)
+		`SELECT id, project_id, kind, url, secret, COALESCE(config, ''), events, created_at FROM webhooks WHERE id = ?`, id)
 	return scanWebhook(row)
 }
 
 func scanWebhook(row *sql.Row) (*Webhook, error) {
 	var w Webhook
 	var events string
-	if err := row.Scan(&w.ID, &w.ProjectID, &w.URL, &w.Secret, &events, &w.CreatedAt); err != nil {
+	if err := row.Scan(&w.ID, &w.ProjectID, &w.Kind, &w.URL, &w.Secret, &w.Config, &events, &w.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -404,7 +436,7 @@ func scanWebhook(row *sql.Row) (*Webhook, error) {
 
 func (s *SystemDB) ListWebhooks(ctx context.Context, projectID string) ([]*Webhook, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, project_id, url, secret, events, created_at FROM webhooks WHERE project_id = ? ORDER BY created_at`,
+		`SELECT id, project_id, kind, url, secret, COALESCE(config, ''), events, created_at FROM webhooks WHERE project_id = ? ORDER BY created_at`,
 		projectID)
 	if err != nil {
 		return nil, err
@@ -414,7 +446,7 @@ func (s *SystemDB) ListWebhooks(ctx context.Context, projectID string) ([]*Webho
 	for rows.Next() {
 		var w Webhook
 		var events string
-		if err := rows.Scan(&w.ID, &w.ProjectID, &w.URL, &w.Secret, &events, &w.CreatedAt); err != nil {
+		if err := rows.Scan(&w.ID, &w.ProjectID, &w.Kind, &w.URL, &w.Secret, &w.Config, &events, &w.CreatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(events), &w.Events)
@@ -446,9 +478,12 @@ func (s *SystemDB) UpdateWebhook(ctx context.Context, w *Webhook) error {
 	if err != nil {
 		return err
 	}
+	if w.Kind == "" {
+		w.Kind = "generic"
+	}
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE webhooks SET url = ?, secret = ?, events = ? WHERE id = ?`,
-		w.URL, w.Secret, string(events), w.ID)
+		`UPDATE webhooks SET kind = ?, url = ?, secret = ?, config = ?, events = ? WHERE id = ?`,
+		w.Kind, w.URL, w.Secret, nullable(w.Config), string(events), w.ID)
 	if err != nil {
 		return err
 	}

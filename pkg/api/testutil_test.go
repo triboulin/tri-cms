@@ -47,7 +47,14 @@ func newTestEnv(t *testing.T) *testEnv {
 	dispatcher := webhooks.NewDispatcher()
 	dispatcher.MaxAttempts = 1 // don't slow tests down with retries
 
+	encryptor, err := auth.NewEncryptor(auth.DeriveKey("test-encryption-key"))
+	if err != nil {
+		t.Fatalf("new encryptor: %v", err)
+	}
+	dispatcher.Decryptor = encryptor
+
 	srv := NewServer(sys, mgr, issuer, dispatcher, nil)
+	srv.Encryptor = encryptor
 	t.Cleanup(func() { srv.Close() })
 
 	return &testEnv{t: t, server: srv, router: NewRouter(srv), issuer: issuer}

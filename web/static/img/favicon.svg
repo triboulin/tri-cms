@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="triCMS">
+  <title>triCMS — icône</title>
+  <rect width="48" height="48" rx="10" fill="#2d7ff9"/>
+  <!-- Trinité : trois cercles entrelacés disposés en triangle -->
+  <g fill="none" stroke-width="3.2">
+    <circle cx="24" cy="15" r="10" stroke="#ffffff"/>
+    <circle cx="15" cy="30" r="10" stroke="#b9d6ff"/>
+    <circle cx="33" cy="30" r="10" stroke="#0f4fb8"/>
+  </g>
+  <!-- CMS : lignes de contenu empilées au centre du triangle -->
+  <g fill="#ffffff">
+    <rect x="18"   y="20.4" width="12" height="2.2" rx="1.1"/>
+    <rect x="19.5" y="23.9" width="9"  height="2.2" rx="1.1"/>
+    <rect x="21"   y="27.4" width="6"  height="2.2" rx="1.1"/>
+  </g>
+</svg>

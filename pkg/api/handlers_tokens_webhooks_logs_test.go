@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	trischema "tricms/pkg/schema"
@@ -100,6 +102,170 @@ func TestWebhooks_AdminOnlyCRUD(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rec.Code)
 	}
+}
+
+// TestWebhooks_GitHubDispatchKind covers the github_dispatch webhook kind:
+// creation requires owner/repo/token, the token round-trips encrypted (it
+// must never appear verbatim in storage or in any API response), and
+// updating without a new token keeps the previously stored one.
+func TestWebhooks_GitHubDispatchKind(t *testing.T) {
+	e := newTestEnv(t)
+	admin := e.createUser("ghw1@x.com", true)
+	p := e.createProject("GHDispatch")
+
+	// Missing required fields.
+	rec := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "github_dispatch", GitHubOwner: "louis", Events: []string{"content.publish"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing github_repo, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site",
+		Events: []string{"content.publish"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing github_token on create, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site", GitHubToken: "ghp_secret123",
+		Events: []string{"content.publish", "content.unpublish"},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "ghp_secret123") {
+		t.Fatalf("plaintext token must never appear in the API response, got: %s", rec.Body.String())
+	}
+	wh := decodeBody[storage.Webhook](t, rec)
+
+	// The token is encrypted at rest, never stored verbatim.
+	stored, err := e.server.System.GetWebhook(bgCtx(), wh.ID)
+	if err != nil {
+		t.Fatalf("get webhook: %v", err)
+	}
+	if strings.Contains(stored.Config, "ghp_secret123") {
+		t.Fatalf("token must be encrypted at rest, got config: %s", stored.Config)
+	}
+	decrypted, err := e.server.Encryptor.Decrypt(extractConfigToken(t, stored.Config))
+	if err != nil || decrypted != "ghp_secret123" {
+		t.Fatalf("expected stored token to decrypt back to the original, got %q (err=%v)", decrypted, err)
+	}
+
+	// Update without a token keeps the previous one, but does update owner/repo.
+	rec = e.request(http.MethodPut, "/api/v1/projects/"+p.ID+"/webhooks/"+wh.ID, admin, webhookRequest{
+		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site-v2",
+		Events: []string{"content.publish"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	stored2, _ := e.server.System.GetWebhook(bgCtx(), wh.ID)
+	decrypted2, err := e.server.Encryptor.Decrypt(extractConfigToken(t, stored2.Config))
+	if err != nil || decrypted2 != "ghp_secret123" {
+		t.Fatalf("expected token to be preserved across an update that omits it, got %q (err=%v)", decrypted2, err)
+	}
+
+	// Unknown kind is rejected.
+	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "carrier_pigeon", Events: []string{"content.publish"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown kind, got %d", rec.Code)
+	}
+}
+
+// TestWebhooks_ValidationEdgeCases exercises the request-validation paths
+// of buildWebhookFields/handleCreateWebhook/handleUpdateWebhook that
+// TestWebhooks_AdminOnlyCRUD and TestWebhooks_GitHubDispatchKind don't
+// already cover: malformed JSON bodies, missing events, missing
+// generic-kind fields, updating with an invalid payload, and creating a
+// github_dispatch webhook with no encryption key configured.
+func TestWebhooks_ValidationEdgeCases(t *testing.T) {
+	e := newTestEnv(t)
+	admin := e.createUser("wve1@x.com", true)
+	p := e.createProject("Validation")
+
+	// Malformed JSON body (a bare JSON string, not an object) on create.
+	rec := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, "not-an-object")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed body on create, got %d", rec.Code)
+	}
+
+	// No events at all.
+	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "generic", URL: "https://example.com", Secret: "s",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing events, got %d", rec.Code)
+	}
+
+	// Generic kind missing url/secret.
+	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "generic", Events: []string{"content.create"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing url/secret on kind=generic, got %d", rec.Code)
+	}
+
+	// A valid webhook to update afterwards.
+	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "generic", URL: "https://example.com", Secret: "s", Events: []string{"content.create"},
+	})
+	wh := decodeBody[storage.Webhook](t, rec)
+
+	// Malformed JSON body on update.
+	rec = e.request(http.MethodPut, "/api/v1/projects/"+p.ID+"/webhooks/"+wh.ID, admin, "not-an-object")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed body on update, got %d", rec.Code)
+	}
+
+	// Validation failure on update (unknown kind).
+	rec = e.request(http.MethodPut, "/api/v1/projects/"+p.ID+"/webhooks/"+wh.ID, admin, webhookRequest{
+		Kind: "smoke_signal", Events: []string{"content.create"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown kind on update, got %d", rec.Code)
+	}
+
+	// Update targeting a non-existent webhook.
+	rec = e.request(http.MethodPut, "/api/v1/projects/"+p.ID+"/webhooks/does-not-exist", admin, webhookRequest{
+		Kind: "generic", URL: "https://example.com", Secret: "s", Events: []string{"content.create"},
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for updating a non-existent webhook, got %d", rec.Code)
+	}
+
+	// Deleting a non-existent webhook.
+	rec = e.request(http.MethodDelete, "/api/v1/projects/"+p.ID+"/webhooks/does-not-exist", admin, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for deleting a non-existent webhook, got %d", rec.Code)
+	}
+
+	// github_dispatch requires a server-side encryption key.
+	e.server.Encryptor = nil
+	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "github_dispatch", GitHubOwner: "o", GitHubRepo: "r", GitHubToken: "t",
+		Events: []string{"content.publish"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when no Encryptor is configured, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// extractConfigToken pulls the (encrypted) token field out of a
+// webhooks.GitHubDispatchConfig JSON blob for test assertions.
+func extractConfigToken(t *testing.T, config string) string {
+	t.Helper()
+	var cfg struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal([]byte(config), &cfg); err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	return cfg.Token
 }
 
 // TestProjectLogs_AdminOnly guards the audit log being scoped to one

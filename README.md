@@ -1,16 +1,25 @@
-# triCMS
+<p align="center">
+  <img src="web/static/img/logo.svg" alt="triCMS logo" width="128" height="128">
+</p>
+
+<h1 align="center">triCMS</h1>
 
 CMS headless multi-tenant écrit en Go, implémentant la spécification `specs.md` :
 RBAC à deux niveaux (ADMIN global + rôles projet cumulatifs), isolation SQLite
 par projet, typage de champs Simple/Collection, IHM d'administration HTMX
-rendue côté serveur, et webhooks avec retries.
+rendue côté serveur, et webhooks avec retries (livraison signée générique, ou
+`repository_dispatch` GitHub direct pour republier un site statique).
 
 ## Démarrage rapide
 
 ```bash
-go build -o tricms ./cmd/tricms
-TRICMS_JWT_SECRET="change-me-in-production" ./tricms
+go build -o tricms ./cmd/tricms && TRICMS_JWT_SECRET="change-me-in-production" && TRICMS_ENCRYPTION_KEY="change-me-in-production" && ./tricms
 ```
+ou sur Windows  :
+```cmd
+set TRICMS_JWT_SECRET="change-me-in-production" && set TRICMS_ENCRYPTION_KEY="change-me-in-production" && go build -o tricms.exe ./cmd/tricms && .\tricms.exe
+```
+
 
 Variables d'environnement :
 
@@ -19,6 +28,7 @@ Variables d'environnement :
 | `TRICMS_ADDR` | `:8080` | Adresse d'écoute HTTP |
 | `TRICMS_DATA_DIR` | `./data` | Racine de `system.db` et `./data/projects/{id}/` |
 | `TRICMS_JWT_SECRET` | *(généré, éphémère)* | Clé de signature des sessions JWT — à fixer en production |
+| `TRICMS_ENCRYPTION_KEY` | *(généré, éphémère)* | Clé de chiffrement (AES-256-GCM) des secrets stockés en base — actuellement le token GitHub des webhooks `kind=github_dispatch`. À fixer en production, sinon ces tokens deviennent indéchiffrables au redémarrage. |
 | `TRICMS_BOOTSTRAP_EMAIL` | `admin@tricms.local` | Email du premier compte ADMIN créé automatiquement si `system.db` est vide |
 
 Au premier démarrage sans utilisateur existant, un compte **ADMIN** est créé
@@ -64,19 +74,24 @@ Couverture par package (dernière exécution) :
 | Package | Couverture |
 |---|---|
 | `pkg/webhooks` | ~93 % |
-| `pkg/auth` | ~91 % |
+| `pkg/auth` | ~92 % |
 | `pkg/schema` | ~89 % |
-| `pkg/storage` | ~84 % |
-| `pkg/api` | ~79 % |
-| **Total `pkg/...`** | **~82 %** |
+| `pkg/storage` | ~81 % |
+| `pkg/api` | ~72 % |
+| **Total `pkg/...`** | **~76 %** |
 
 La cible de la spec (§5) est 90 %. L'essentiel des chemins fonctionnels et
 de sécurité (RBAC, validation de schéma, isolation multi-tenant, retries
-webhooks) est testé ; le reliquat sous 90 % dans `pkg/api` correspond
-principalement à des branches défensives (erreurs internes de stockage
-difficilement déclenchables sans mock d'infrastructure) plutôt qu'à des
-chemins fonctionnels non couverts. `cmd/tricms` (wiring pur, sans tests)
-est validé par un test de fumée manuel (démarrage réel + requêtes HTTP).
+webhooks, chiffrement/déchiffrement des secrets de webhook) est testé ; le
+reliquat sous 90 % correspond principalement à des branches défensives
+(erreurs internes de stockage difficilement déclenchables sans mock
+d'infrastructure) plutôt qu'à des chemins fonctionnels non couverts.
+`pkg/api` a reculé par rapport à la mesure précédente (~79 %) avec l'ajout
+du webhook `kind=github_dispatch` (validation, chiffrement, formulaire
+HTMX) : le nouveau code est lui-même testé à 70-100 % selon les fonctions,
+mais dilue la moyenne du paquet le temps que la couverture d'ensemble
+rattrape sa taille. `cmd/tricms` (wiring pur, sans tests) est validé par un
+test de fumée manuel (démarrage réel + requêtes HTTP).
 
 ## Limites connues / pistes d'évolution
 

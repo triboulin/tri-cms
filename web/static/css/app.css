@@ -30,6 +30,11 @@ body {
 .tri-topbar-actions { display: flex; align-items: center; gap: 10px; }
 .tri-user-email { color: var(--tri-muted); font-size: 0.85rem; }
 
+/* Logo (marque + wordmark) */
+.tri-logo { height: 22px; display: block; }
+.tri-login-logo { display: flex; justify-content: center; margin-bottom: 16px; }
+.tri-logo-login { height: 44px; display: block; }
+
 /* Breadcrumb with hover dropdowns (replaces the old sidebar). */
 .tri-breadcrumb { color: var(--tri-muted); font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
 .tri-breadcrumb > a { color: var(--tri-muted); text-decoration: none; display: flex; align-items: center; gap: 4px; }

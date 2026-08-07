@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -39,8 +40,24 @@ func webhookEventOptions(selected []string) []webhookEventOption {
 }
 
 type webhookRowVM struct {
-	Webhook *storage.Webhook
-	Events  []webhookEventOption
+	Webhook     *storage.Webhook
+	Events      []webhookEventOption
+	IsGitHub    bool
+	GitHubOwner string
+	GitHubRepo  string
+}
+
+// githubDispatchDisplayFields extracts the non-secret parts (owner/repo) of
+// a github_dispatch webhook's Config, for prefilling the edit form -- the
+// token itself is never sent back to the browser, only re-entered to
+// rotate it (see htmxUpdateWebhook).
+func githubDispatchDisplayFields(wh *storage.Webhook) (owner, repo string) {
+	if wh.Kind != webhooks.KindGitHubDispatch || wh.Config == "" {
+		return "", ""
+	}
+	var cfg webhooks.GitHubDispatchConfig
+	_ = json.Unmarshal([]byte(wh.Config), &cfg)
+	return cfg.Owner, cfg.Repo
 }
 
 // htmxWebhooks renders the webhook management page (spec §4.2 "[Webhooks]",
@@ -58,7 +75,14 @@ func (s *Server) htmxWebhooks(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := make([]webhookRowVM, 0, len(whs))
 	for _, wh := range whs {
-		rows = append(rows, webhookRowVM{Webhook: wh, Events: webhookEventOptions(wh.Events)})
+		owner, repo := githubDispatchDisplayFields(wh)
+		rows = append(rows, webhookRowVM{
+			Webhook:     wh,
+			Events:      webhookEventOptions(wh.Events),
+			IsGitHub:    wh.Kind == webhooks.KindGitHubDispatch,
+			GitHubOwner: owner,
+			GitHubRepo:  repo,
+		})
 	}
 	content := struct {
 		Webhooks        []webhookRowVM
@@ -74,6 +98,22 @@ func (s *Server) htmxWebhooks(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "page:webhooks", data)
 }
 
+// webhookRequestFromForm reads a submitted create/edit webhook form into a
+// webhookRequest, so both HTMX handlers below can share the same
+// kind-aware validation/encryption logic as the JSON API
+// (Server.buildWebhookFields in handlers_webhooks.go).
+func webhookRequestFromForm(r *http.Request) webhookRequest {
+	return webhookRequest{
+		Kind:        r.FormValue("kind"),
+		URL:         r.FormValue("url"),
+		Secret:      r.FormValue("secret"),
+		Events:      r.Form["events"],
+		GitHubOwner: r.FormValue("github_owner"),
+		GitHubRepo:  r.FormValue("github_repo"),
+		GitHubToken: r.FormValue("github_token"),
+	}
+}
+
 func (s *Server) htmxCreateWebhook(w http.ResponseWriter, r *http.Request) {
 	user, project := s.loadProjectForHTMX(w, r, auth.SectionWebhooks)
 	if user == nil {
@@ -84,14 +124,13 @@ func (s *Server) htmxCreateWebhook(w http.ResponseWriter, r *http.Request) {
 		redirectWithFlash(w, r, back, "Formulaire invalide.", "error")
 		return
 	}
-	url := r.FormValue("url")
-	secret := r.FormValue("secret")
-	events := r.Form["events"]
-	if url == "" || secret == "" || len(events) == 0 {
-		redirectWithFlash(w, r, back, "URL, secret et au moins un évènement sont requis.", "error")
+	req := webhookRequestFromForm(r)
+	kind, url, secret, config, problem := s.buildWebhookFields(req, nil)
+	if problem != "" {
+		redirectWithFlash(w, r, back, problem, "error")
 		return
 	}
-	wh := &storage.Webhook{ID: uuid.NewString(), ProjectID: project.ID, URL: url, Secret: secret, Events: events}
+	wh := &storage.Webhook{ID: uuid.NewString(), ProjectID: project.ID, Kind: kind, URL: url, Secret: secret, Config: config, Events: req.Events}
 	if err := s.System.CreateWebhook(r.Context(), wh); err != nil {
 		redirectWithFlash(w, r, back, "Création impossible : "+err.Error(), "error")
 		return
@@ -110,14 +149,18 @@ func (s *Server) htmxUpdateWebhook(w http.ResponseWriter, r *http.Request) {
 		redirectWithFlash(w, r, back, "Formulaire invalide.", "error")
 		return
 	}
-	url := r.FormValue("url")
-	secret := r.FormValue("secret")
-	events := r.Form["events"]
-	if url == "" || secret == "" || len(events) == 0 {
-		redirectWithFlash(w, r, back, "URL, secret et au moins un évènement sont requis.", "error")
+	existing, err := s.System.GetWebhook(r.Context(), webhookID)
+	if err != nil {
+		writeHTMXStorageError(w, r, err, back)
 		return
 	}
-	wh := &storage.Webhook{ID: webhookID, URL: url, Secret: secret, Events: events}
+	req := webhookRequestFromForm(r)
+	kind, url, secret, config, problem := s.buildWebhookFields(req, existing)
+	if problem != "" {
+		redirectWithFlash(w, r, back, problem, "error")
+		return
+	}
+	wh := &storage.Webhook{ID: webhookID, Kind: kind, URL: url, Secret: secret, Config: config, Events: req.Events}
 	if err := s.System.UpdateWebhook(r.Context(), wh); err != nil {
 		writeHTMXStorageError(w, r, err, back)
 		return

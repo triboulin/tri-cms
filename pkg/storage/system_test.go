@@ -274,6 +274,113 @@ func TestSystemDB_Webhooks(t *testing.T) {
 	}
 }
 
+func TestSystemDB_Webhook_GithubDispatchKind(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	proj := &Project{ID: "proj_ghd", Name: "GHD", FolderPath: "./data/projects/proj_ghd"}
+	if err := db.CreateProject(ctx, proj); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := `{"owner":"louis","repo":"site","token":"encrypted-blob"}`
+	wh := &Webhook{
+		ID:        uuid.NewString(),
+		ProjectID: proj.ID,
+		Kind:      "github_dispatch",
+		Config:    cfg,
+		Events:    []string{"content.publish", "content.unpublish"},
+	}
+	if err := db.CreateWebhook(ctx, wh); err != nil {
+		t.Fatalf("create webhook: %v", err)
+	}
+
+	got, err := db.GetWebhook(ctx, wh.ID)
+	if err != nil {
+		t.Fatalf("get webhook: %v", err)
+	}
+	if got.Kind != "github_dispatch" || got.Config != cfg {
+		t.Fatalf("expected kind/config to round-trip, got kind=%q config=%q", got.Kind, got.Config)
+	}
+
+	list, err := db.ListWebhooks(ctx, proj.ID)
+	if err != nil || len(list) != 1 || list[0].Config != cfg {
+		t.Fatalf("expected 1 webhook with config preserved via List: %v %+v", err, list)
+	}
+
+	wh.Config = `{"owner":"louis","repo":"site2","token":"new-encrypted-blob"}`
+	if err := db.UpdateWebhook(ctx, wh); err != nil {
+		t.Fatalf("update webhook: %v", err)
+	}
+	got2, _ := db.GetWebhook(ctx, wh.ID)
+	if got2.Config != wh.Config {
+		t.Fatalf("expected updated config to round-trip, got %q", got2.Config)
+	}
+}
+
+func TestSystemDB_Webhook_DefaultKindIsGeneric(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	proj := &Project{ID: "proj_default_kind", Name: "P", FolderPath: "./data/projects/proj_default_kind"}
+	if err := db.CreateProject(ctx, proj); err != nil {
+		t.Fatal(err)
+	}
+
+	wh := &Webhook{ID: uuid.NewString(), ProjectID: proj.ID, URL: "https://example.com", Secret: "s", Events: []string{"content.create"}}
+	if err := db.CreateWebhook(ctx, wh); err != nil {
+		t.Fatalf("create webhook: %v", err)
+	}
+	got, err := db.GetWebhook(ctx, wh.ID)
+	if err != nil || got.Kind != "generic" {
+		t.Fatalf("expected default kind 'generic', got %q (err=%v)", got.Kind, err)
+	}
+}
+
+// TestMigrateWebhookColumns_IdempotentOnPreExistingTable simulates a
+// system.db created before the kind/config columns existed: a webhooks
+// table with only the original columns. OpenSystemDB must add the new
+// columns on top without failing, and running it twice must not error
+// either (ALTER TABLE ADD COLUMN is not naturally idempotent in SQLite).
+func TestMigrateWebhookColumns_IdempotentOnPreExistingTable(t *testing.T) {
+	db, err := OpenSystemDB(":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	// Drop down to the pre-migration shape and re-run the migration twice.
+	if _, err := db.db.Exec(`DROP TABLE webhooks`); err != nil {
+		t.Fatalf("drop table: %v", err)
+	}
+	if _, err := db.db.Exec(`CREATE TABLE webhooks (
+		id TEXT PRIMARY KEY,
+		project_id TEXT,
+		url TEXT NOT NULL,
+		secret TEXT NOT NULL,
+		events TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("recreate legacy table: %v", err)
+	}
+
+	if err := migrateWebhookColumns(db.db); err != nil {
+		t.Fatalf("first migration: %v", err)
+	}
+	if err := migrateWebhookColumns(db.db); err != nil {
+		t.Fatalf("second (idempotent) migration: %v", err)
+	}
+
+	// Columns should now be usable via the normal CRUD path.
+	ctx := context.Background()
+	wh := &Webhook{ID: uuid.NewString(), ProjectID: "p", Kind: "github_dispatch", Config: `{"owner":"a","repo":"b"}`, Events: []string{"content.publish"}}
+	if err := db.CreateWebhook(ctx, wh); err != nil {
+		t.Fatalf("create webhook after migration: %v", err)
+	}
+	got, err := db.GetWebhook(ctx, wh.ID)
+	if err != nil || got.Kind != "github_dispatch" {
+		t.Fatalf("expected migrated columns to work, got %+v (err=%v)", got, err)
+	}
+}
+
 func TestSystemDB_GlobalLogs(t *testing.T) {
 	ctx := context.Background()
 	db := newTestSystemDB(t)

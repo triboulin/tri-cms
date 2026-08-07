@@ -22,6 +22,12 @@ type Server struct {
 	Dispatcher *webhooks.Dispatcher
 	Templates  *template.Template
 
+	// Encryptor encrypts/decrypts secrets embedded in a webhook's Config
+	// (currently only GitHubDispatchConfig.Token). Set post-construction
+	// from cmd/tricms/main.go, same pattern as StaticFS/MaxUploadSize below
+	// -- nil is fine as long as no github_dispatch webhook is created.
+	Encryptor *auth.Encryptor
+
 	// SessionCookieName is the cookie carrying the session JWT.
 	SessionCookieName string
 	// StaticFS serves /static/* for the HTMX UI (CSS/JS): an embed.FS in

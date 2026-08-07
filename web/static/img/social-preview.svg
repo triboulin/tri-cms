@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" role="img" aria-label="triCMS">
+  <title>triCMS — social preview</title>
+  <!-- Fond -->
+  <rect width="1280" height="640" fill="#ffffff"/>
+  <!-- Groupe logo + texte centré -->
+  <g transform="translate(640 280)">
+    <!-- Trinité : trois cercles entrelacés -->
+    <g fill="none" stroke-width="42" transform="translate(-240 -20)">
+      <circle cx="0" cy="-88" r="112" stroke="#2d7ff9"/>
+      <circle cx="-97" cy="88" r="112" stroke="#7ab3ff"/>
+      <circle cx="97" cy="88" r="112" stroke="#1a6ce0"/>
+    </g>
+    <!-- CMS : lignes de contenu -->
+    <g fill="#1d1f25" transform="translate(-240 -20)">
+      <rect x="-63" y="-12" width="126" height="24" rx="12"/>
+      <rect x="-47" y="26" width="94" height="24" rx="12"/>
+      <rect x="-31" y="64" width="62" height="24" rx="12"/>
+    </g>
+    <!-- Wordmark -->
+    <text x="40" y="20" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="140" font-weight="700" letter-spacing="2">
+      <tspan fill="#2d7ff9">tri</tspan><tspan fill="#1d1f25">CMS</tspan>
+    </text>
+    <!-- Tagline -->
+    <text x="40" y="110" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="42" font-weight="400" fill="#6b7280">Headless CMS in Go</text>
+  </g>
+</svg>

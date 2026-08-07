@@ -54,23 +54,25 @@
       <div class="tri-card">
         <h3><span class="material-icons" aria-hidden="true">terminal</span> Console interactive</h3>
         <p class="tri-empty">Cliquez un endpoint ci-dessous pour préremplir la requête, ou modifiez-la librement. Sans jeton renseigné, la requête part avec votre session actuelle. Ceci exécute une vraie requête sur ce projet.</p>
-        <div class="tri-form-row">
-          <div style="flex:0 0 110px;">
-            <label>Méthode</label>
-            <select id="api-console-method">
-              <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
-            </select>
+        <div class="tri-form">
+          <div class="tri-form-row">
+            <div style="flex:0 0 120px;">
+              <label>Méthode</label>
+              <select id="api-console-method">
+                <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+              </select>
+            </div>
+            <div style="flex:3;">
+              <label>Chemin</label>
+              <input type="text" id="api-console-path" value="/api/v1/projects/{{.CurrentProject.ID}}/schemas">
+            </div>
           </div>
-          <div style="flex:3;">
-            <label>Chemin</label>
-            <input type="text" id="api-console-path" value="/api/v1/projects/{{.CurrentProject.ID}}/schemas">
-          </div>
+          <label>Jeton (optionnel — laissez vide pour utiliser votre session)</label>
+          <input type="text" id="api-console-token" placeholder="trk_…" value="{{.Content.RevealedToken}}">
+          <label>Corps JSON (POST / PUT / PATCH)</label>
+          <textarea id="api-console-body" placeholder="{}" style="font-family:monospace; min-height:80px;"></textarea>
+          <button type="button" class="tri-btn tri-btn-sm" id="api-console-send"><span class="material-icons" aria-hidden="true">send</span> Envoyer</button>
         </div>
-        <label>Jeton (optionnel — laissez vide pour utiliser votre session)</label>
-        <input type="text" id="api-console-token" placeholder="trk_…" value="{{.Content.RevealedToken}}">
-        <label>Corps JSON (POST / PUT / PATCH)</label>
-        <textarea id="api-console-body" placeholder="{}" style="font-family:monospace; min-height:80px;"></textarea>
-        <button type="button" class="tri-btn tri-btn-sm" id="api-console-send"><span class="material-icons" aria-hidden="true">send</span> Envoyer</button>
         <div class="tri-api-console-response" id="api-console-response" hidden>
           <div class="tri-api-console-status"></div>
           <pre class="tri-api-console-body"></pre>

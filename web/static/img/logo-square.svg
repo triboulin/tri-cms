@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="triCMS">
+  <title>triCMS — logo carré</title>
+  <!-- Fond -->
+  <rect width="512" height="512" rx="96" fill="#ffffff"/>
+  <!-- Trinité : trois cercles entrelacés disposés en triangle -->
+  <g fill="none" stroke-width="34" transform="translate(256 216)">
+    <circle cx="0" cy="-72" r="96" stroke="#2d7ff9"/>
+    <circle cx="-83" cy="72" r="96" stroke="#7ab3ff"/>
+    <circle cx="83" cy="72" r="96" stroke="#1a6ce0"/>
+  </g>
+  <!-- CMS : lignes de contenu empilées au centre du triangle -->
+  <g fill="#1d1f25" transform="translate(256 216)">
+    <rect x="-54" y="-24" width="108" height="20" rx="10"/>
+    <rect x="-40" y="8" width="80" height="20" rx="10"/>
+    <rect x="-27" y="40" width="54" height="20" rx="10"/>
+  </g>
+</svg>

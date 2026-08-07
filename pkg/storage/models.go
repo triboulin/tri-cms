@@ -67,8 +67,10 @@ type APIToken struct {
 type Webhook struct {
 	ID        string    `json:"id"`
 	ProjectID string    `json:"project_id"`
-	URL       string    `json:"url"`
-	Secret    string    `json:"-"`
+	Kind      string    `json:"kind"` // "generic" (default) or "github_dispatch"
+	URL       string    `json:"url"`  // used by kind=generic
+	Secret    string    `json:"-"`    // HMAC secret, used by kind=generic
+	Config    string    `json:"-"`    // raw JSON, kind-specific (e.g. github_dispatch owner/repo/token); token is encrypted at rest, never serialized as-is -- see pkg/api masking
 	Events    []string  `json:"events"`
 	CreatedAt time.Time `json:"created_at"`
 }

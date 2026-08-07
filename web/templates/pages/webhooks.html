@@ -15,10 +15,29 @@
         {{range .Content.Webhooks}}
         <div class="tri-card">
           <form class="tri-form" method="post" action="/projects/{{$.CurrentProject.ID}}/webhooks/{{.Webhook.ID}}/update">
-            <div class="tri-form-row">
-              <div><label>URL</label><input type="url" name="url" value="{{.Webhook.URL}}" required></div>
-              <div><label>Secret</label><input type="text" name="secret" value="{{.Webhook.Secret}}" required></div>
+            <label>Type</label>
+            <select class="tri-kind-select" name="kind" onchange="triToggleWebhookKind(this)">
+              <option value="generic" {{if not .IsGitHub}}selected{{end}}>Générique (URL + signature HMAC)</option>
+              <option value="github_dispatch" {{if .IsGitHub}}selected{{end}}>GitHub Actions (repository_dispatch)</option>
+            </select>
+
+            <div class="tri-kind-generic">
+              <div class="tri-form-row">
+                <div><label>URL</label><input type="url" name="url" value="{{.Webhook.URL}}"></div>
+                <div><label>Secret</label><input type="text" name="secret" value="{{.Webhook.Secret}}"></div>
+              </div>
             </div>
+
+            <div class="tri-kind-github">
+              <div class="tri-form-row">
+                <div><label>Owner GitHub</label><input type="text" name="github_owner" value="{{.GitHubOwner}}" placeholder="louis"></div>
+                <div><label>Repo GitHub</label><input type="text" name="github_repo" value="{{.GitHubRepo}}" placeholder="mon-site"></div>
+              </div>
+              <label>Token GitHub (PAT)</label>
+              <input type="password" name="github_token" placeholder="Laisser vide pour conserver le token actuel" autocomplete="off">
+              <p class="tri-hint">Le token n'est jamais réaffiché ; laissez ce champ vide pour ne pas le changer.</p>
+            </div>
+
             <label>Évènements</label>
             <div class="tri-checkbox-list">
               {{range .Events}}
@@ -40,10 +59,28 @@
       <div class="tri-card" id="create">
         <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau webhook</h3>
         <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/webhooks/create">
-          <div class="tri-form-row">
-            <div><label>URL</label><input type="url" name="url" placeholder="https://example.com/hook" required></div>
-            <div><label>Secret</label><input type="text" name="secret" placeholder="secret partagé (HMAC)" required></div>
+          <label>Type</label>
+          <select class="tri-kind-select" name="kind" onchange="triToggleWebhookKind(this)">
+            <option value="generic" selected>Générique (URL + signature HMAC)</option>
+            <option value="github_dispatch">GitHub Actions (repository_dispatch)</option>
+          </select>
+
+          <div class="tri-kind-generic">
+            <div class="tri-form-row">
+              <div><label>URL</label><input type="url" name="url" placeholder="https://example.com/hook"></div>
+              <div><label>Secret</label><input type="text" name="secret" placeholder="secret partagé (HMAC)"></div>
+            </div>
           </div>
+
+          <div class="tri-kind-github" style="display:none;">
+            <div class="tri-form-row">
+              <div><label>Owner GitHub</label><input type="text" name="github_owner" placeholder="louis"></div>
+              <div><label>Repo GitHub</label><input type="text" name="github_repo" placeholder="mon-site"></div>
+            </div>
+            <label>Token GitHub (PAT, scope Contents: Read and write)</label>
+            <input type="password" name="github_token" placeholder="ghp_..." autocomplete="off">
+          </div>
+
           <label>Évènements</label>
           <div class="tri-checkbox-list">
             {{range .Content.NewEventOptions}}
@@ -55,6 +92,21 @@
       </div>
     </div>
   </div>
+  <script>
+    // Toggles which field group (generic URL+secret vs. GitHub owner/repo/token)
+    // is shown based on the selected webhook kind. Validation of which fields
+    // are actually required happens server-side (see buildWebhookFields in
+    // pkg/api/handlers_webhooks.go), so hiding a group here is purely cosmetic.
+    function triToggleWebhookKind(select) {
+      var form = select.closest('form');
+      var generic = form.querySelector('.tri-kind-generic');
+      var github = form.querySelector('.tri-kind-github');
+      var isGithub = select.value === 'github_dispatch';
+      if (generic) generic.style.display = isGithub ? 'none' : '';
+      if (github) github.style.display = isGithub ? '' : 'none';
+    }
+    document.querySelectorAll('.tri-kind-select').forEach(triToggleWebhookKind);
+  </script>
 </body>
 </html>
 {{end}}
