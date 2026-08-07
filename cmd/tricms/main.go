@@ -122,11 +122,16 @@ func bootstrapFirstAdmin(system *storage.SystemDB) error {
 	}
 
 	email := envOr("TRICMS_BOOTSTRAP_EMAIL", "admin@tricms.local")
-	password, err := randomSecret()
-	if err != nil {
-		return err
+	password := os.Getenv("TRICMS_BOOTSTRAP_PASS")
+	generated := password == ""
+	if generated {
+		var err error
+		password, err = randomSecret()
+		if err != nil {
+			return err
+		}
+		password = password[:16]
 	}
-	password = password[:16]
 
 	hash, err := auth.HashPassword(password)
 	if err != nil {
@@ -140,8 +145,12 @@ func bootstrapFirstAdmin(system *storage.SystemDB) error {
 	log.Println("========================================================")
 	log.Println("No users found: created the first global ADMIN account.")
 	log.Printf("  email:    %s\n", email)
-	log.Printf("  password: %s\n", password)
-	log.Println("Change this password immediately after logging in.")
+	if generated {
+		log.Printf("  password: %s\n", password)
+		log.Println("Change this password immediately after logging in.")
+	} else {
+		log.Println("  password: (set via TRICMS_BOOTSTRAP_PASS)")
+	}
 	log.Println("========================================================")
 	return nil
 }

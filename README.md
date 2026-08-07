@@ -30,6 +30,7 @@ Variables d'environnement :
 | `TRICMS_JWT_SECRET` | *(généré, éphémère)* | Clé de signature des sessions JWT — à fixer en production |
 | `TRICMS_ENCRYPTION_KEY` | *(généré, éphémère)* | Clé de chiffrement (AES-256-GCM) des secrets stockés en base — actuellement le token GitHub des webhooks `kind=github_dispatch`. À fixer en production, sinon ces tokens deviennent indéchiffrables au redémarrage. |
 | `TRICMS_BOOTSTRAP_EMAIL` | `admin@tricms.local` | Email du premier compte ADMIN créé automatiquement si `system.db` est vide |
+| `TRICMS_BOOTSTRAP_PASS` | *(généré aléatoirement)* | Mot de passe du premier compte ADMIN — optionnel, sinon un mot de passe est généré et affiché une seule fois dans les logs |
 
 Au premier démarrage sans utilisateur existant, un compte **ADMIN** est créé
 automatiquement ; l'email et le mot de passe généré sont affichés une seule
