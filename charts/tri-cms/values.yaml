@@ -1,0 +1,68 @@
+# Valeurs par défaut du chart tri-cms.
+# La CI (voir .github/workflows/build-push.yml) surcharge la plupart de ces
+# valeurs avec --set au moment du helm upgrade ; ce fichier sert de valeurs
+# par défaut pour un déploiement manuel (helm install en local depuis un
+# poste du homelab, par exemple pour tester avant de créer le tag).
+
+replicaCount: 1
+
+image:
+  repository: registry.triboulin.fr/tri-cms
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Credentials pour le pull de l'image privée depuis registry.triboulin.fr.
+# Générés en secret Kubernetes par templates/registry-secret.yaml.
+# Ne jamais committer de vraies valeurs ici : elles arrivent via --set
+# depuis les secrets GitHub Actions.
+registry:
+  server: registry.triboulin.fr
+  username: ""
+  password: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  # tricms écoute sur TRICMS_ADDR=:8080 (voir Dockerfile).
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  className: traefik
+  host: cms.triboulin.fr
+  tls: false
+  # Le TLS/HTTPS public est géré par Nginx Proxy Manager en amont de k3s,
+  # pas par l'ingress lui-même.
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+# triCMS est stateful : system.db, les SQLite par projet et les médias
+# uploadés vivent tous sous /data (voir Dockerfile: VOLUME ["/data"]).
+# Sans volume persistant, chaque redéploiement ou restart de pod efface
+# toutes les données -- donc activé par défaut ici, contrairement au chart
+# générique du skill. Backé par la StorageClass par défaut du cluster
+# (local-path sur k3s, qui est RWO / node-local -- voir la stratégie de
+# déploiement "Recreate" dans deployment.yaml, nécessaire pour ce type de
+# volume).
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClassName: "" # vide = StorageClass par défaut du cluster
+  accessModes:
+    - ReadWriteOnce
+
+# Variables d'environnement runtime de l'app. TRICMS_JWT_SECRET et
+# TRICMS_ENCRYPTION_KEY sont nécessaires en production : sans elles, tricms
+# génère des valeurs éphémères à chaque démarrage (voir cmd/tricms/main.go),
+# ce qui déconnecte tous les utilisateurs et rend les secrets de webhooks
+# chiffrés illisibles à chaque redéploiement. Passées via --set depuis les
+# secrets GitHub Actions du même nom, jamais en dur ici.
+env:
+  TRICMS_JWT_SECRET: ""
+  TRICMS_ENCRYPTION_KEY: ""

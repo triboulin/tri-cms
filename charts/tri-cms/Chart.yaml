@@ -1,0 +1,6 @@
+apiVersion: v2
+name: tri-cms
+description: Chart Helm pour déployer tri-cms sur le cluster k3s du homelab
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

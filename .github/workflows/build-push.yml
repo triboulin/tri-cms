@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Docker Build and Push
 
 on:
   push:
@@ -9,9 +9,34 @@ concurrency:
   group: build-push-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  # Go build/vet/test -- mirrors the checks run throughout development
+  # (go build ./... && go vet ./... && go test ./pkg/... -cover).
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build, vet, test
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./pkg/... -cover
+
+  # Build l'image Docker et la pousse sur le registry privé du homelab.
+  # Tourne sur un runner GitHub-hosted classique : il n'a besoin que
+  # d'un accès internet sortant vers registry.triboulin.fr.
   dockerpush:
     runs-on: ubuntu-latest
+    needs: [tests]
     permissions:
       contents: read
     steps:
@@ -24,8 +49,8 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: registry.triboulin.fr
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -35,3 +60,33 @@ jobs:
           tags: |
             registry.triboulin.fr/tri-cms:${{ github.ref_name }}
             registry.triboulin.fr/tri-cms:latest
+
+  # Déploie sur le cluster k3s via Helm. Tourne sur le runner self-hosted
+  # du homelab : c'est lui qui a le kubeconfig et l'accès réseau interne
+  # au cluster.
+  deploy:
+    runs-on: self-hosted
+    needs: [tests, dockerpush]
+    environment:
+      name: production
+      url: https://cms.triboulin.fr
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check K3s Connection
+        run: kubectl get nodes
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install tri-cms ./charts/tri-cms \
+            --set image.repository=registry.triboulin.fr/tri-cms \
+            --set image.tag=${{ github.ref_name }} \
+            --set registry.username=${{ secrets.DOCKER_USERNAME }} \
+            --set registry.password=${{ secrets.DOCKER_PASSWORD }} \
+            --set ingress.host=cms.triboulin.fr \
+            --set env.TRICMS_JWT_SECRET=${{ secrets.TRICMS_JWT_SECRET }} \
+            --set env.TRICMS_ENCRYPTION_KEY=${{ secrets.TRICMS_ENCRYPTION_KEY }} \
+            --atomic --wait \
+            --namespace triboulin.fr \
+            --create-namespace
