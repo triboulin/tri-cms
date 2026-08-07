@@ -82,11 +82,13 @@ jobs:
           helm upgrade --install tri-cms ./charts/tri-cms \
             --set image.repository=registry.triboulin.fr/tri-cms \
             --set image.tag=${{ github.ref_name }} \
-            --set registry.username=${{ secrets.DOCKER_USERNAME }} \
-            --set registry.password=${{ secrets.DOCKER_PASSWORD }} \
+            --set registry.username=${{ secrets.REGISTRY_USERNAME }} \
+            --set registry.password=${{ secrets.REGISTRY_PASSWORD }} \
             --set ingress.host=cms.triboulin.fr \
             --set env.TRICMS_JWT_SECRET=${{ secrets.TRICMS_JWT_SECRET }} \
             --set env.TRICMS_ENCRYPTION_KEY=${{ secrets.TRICMS_ENCRYPTION_KEY }} \
+            --set env.TRICMS_BOOTSTRAP_EMAIL=${{ secrets.TRICMS_BOOTSTRAP_EMAIL }} \
+            --set env.TRICMS_BOOTSTRAP_PASSWORD=${{ secrets.TRICMS_BOOTSTRAP_PASSWORD }} \
             --atomic --wait \
             --namespace triboulin-fr \
             --create-namespace
