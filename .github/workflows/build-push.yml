@@ -88,5 +88,5 @@ jobs:
             --set env.TRICMS_JWT_SECRET=${{ secrets.TRICMS_JWT_SECRET }} \
             --set env.TRICMS_ENCRYPTION_KEY=${{ secrets.TRICMS_ENCRYPTION_KEY }} \
             --atomic --wait \
-            --namespace triboulin.fr \
+            --namespace triboulin-fr \
             --create-namespace
