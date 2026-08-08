@@ -203,7 +203,8 @@ func (s *Server) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.create", map[string]string{"schema": schemaSlug, "id": c.ID})
-	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentCreate, map[string]string{"id": c.ID, "schema": schemaSlug})
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentCreate, map[string]string{"id": c.ID, "schema": schemaSlug})
+	s.dispatchContentStatusEvent(r.Context(), project.ID, schemaSlug, c.ID, storage.StatusDraft, c.Status)
 
 	cr, _ := toContentResponse(c)
 	writeJSON(w, http.StatusCreated, cr)
@@ -266,6 +267,7 @@ func (s *Server) handleUpdateContent(w http.ResponseWriter, r *http.Request) {
 		status = req.Status
 	}
 
+	previousStatus := existing.Status
 	existing.Data = string(dataJSON)
 	existing.Status = status
 	if err := db.UpdateContent(r.Context(), existing); err != nil {
@@ -274,7 +276,8 @@ func (s *Server) handleUpdateContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.update", map[string]string{"schema": schemaSlug, "id": contentID})
-	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": schemaSlug})
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": schemaSlug})
+	s.dispatchContentStatusEvent(r.Context(), project.ID, schemaSlug, contentID, previousStatus, status)
 
 	cr, _ := toContentResponse(existing)
 	writeJSON(w, http.StatusOK, cr)
@@ -314,29 +317,63 @@ func (s *Server) handleDeleteContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.delete", map[string]string{"schema": schemaSlug, "id": contentID})
-	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentDelete, map[string]string{"id": contentID, "schema": schemaSlug})
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentDelete, map[string]string{"id": contentID, "schema": schemaSlug})
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// dispatchWebhooksAsync fires all webhooks subscribed to `event` for a
-// project without blocking the HTTP response. Failures are best-effort
-// logged to global_logs; delivery retry/backoff is handled inside
+// dispatchContentStatusEvent fires content.publish/content.unpublish when a
+// content's status actually crosses the published boundary, on top of the
+// content.create/update event the caller already dispatched. Those two
+// events exist in pkg/webhooks.Event* and are exactly what
+// tricms-setup/tricms_provision.py subscribes github_dispatch webhooks to by
+// default (rebuild-on-publish) -- without this, a project provisioned that
+// way never receives a single delivery, no matter how much content gets
+// created/edited, because nothing ever fired content.publish/unpublish.
+// Returns whether a delivery was actually triggered (see dispatchWebhooksAsync).
+func (s *Server) dispatchContentStatusEvent(ctx context.Context, projectID, schemaSlug, contentID string, oldStatus, newStatus storage.ContentStatus) bool {
+	payload := map[string]string{"id": contentID, "schema": schemaSlug}
+	switch {
+	case newStatus == storage.StatusPublished && oldStatus != storage.StatusPublished:
+		return s.dispatchWebhooksAsync(ctx, projectID, webhooks.EventContentPublish, payload)
+	case oldStatus == storage.StatusPublished && newStatus != storage.StatusPublished:
+		return s.dispatchWebhooksAsync(ctx, projectID, webhooks.EventContentUnpublish, payload)
+	}
+	return false
+}
+
+// dispatchWebhooksAsync fires every webhook subscribed to `event` for a
+// project without blocking the HTTP response: only the (cheap, indexed)
+// lookup of subscribers runs synchronously, so the return value -- whether
+// any webhook was actually subscribed -- is available immediately, letting
+// callers tell the user "redéploiement en cours" only when a delivery is
+// genuinely about to happen rather than unconditionally. Every attempt is
+// recorded via RecordWebhookDelivery (success or failure) so the Webhooks
+// page can show a real history; delivery retry/backoff is handled inside
 // pkg/webhooks.Dispatcher.
-func (s *Server) dispatchWebhooksAsync(projectID, event string, payload any) {
+func (s *Server) dispatchWebhooksAsync(ctx context.Context, projectID, event string, payload any) bool {
 	if s.Dispatcher == nil {
-		return
+		return false
+	}
+	whs, err := s.System.ListWebhooksForEvent(ctx, projectID, event)
+	if err != nil || len(whs) == 0 {
+		return false
 	}
 	go func() {
-		ctx := context.Background()
-		whs, err := s.System.ListWebhooksForEvent(ctx, projectID, event)
-		if err != nil {
-			return
-		}
+		bgCtx := context.Background()
 		for _, wh := range whs {
-			res, err := s.Dispatcher.Send(ctx, wh, event, payload)
-			if err != nil || res == nil || !res.Success {
-				_ = s.System.LogAction(ctx, "", projectID, "webhook.delivery_failed", map[string]any{"webhook_id": wh.ID, "event": event})
+			res, err := s.Dispatcher.Send(bgCtx, wh, event, payload)
+			d := &storage.WebhookDelivery{WebhookID: wh.ID, ProjectID: projectID, Event: event}
+			switch {
+			case err != nil:
+				d.Error = err.Error()
+			case res != nil:
+				d.Success, d.Attempts, d.StatusCode, d.Error = res.Success, res.Attempts, res.LastStatusCode, res.LastError
+			}
+			_ = s.System.RecordWebhookDelivery(bgCtx, d)
+			if !d.Success {
+				_ = s.System.LogAction(bgCtx, "", projectID, "webhook.delivery_failed", map[string]any{"webhook_id": wh.ID, "event": event})
 			}
 		}
 	}()
+	return true
 }

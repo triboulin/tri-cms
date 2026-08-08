@@ -195,6 +195,69 @@ func TestWebhookDispatch_FiresOnContentCreate(t *testing.T) {
 	}
 }
 
+// TestWebhookDispatch_FiresOnContentPublish is a regression test: before
+// this fix, content.publish/content.unpublish were declared in
+// pkg/webhooks.Event* but never actually dispatched anywhere, so a webhook
+// subscribed only to them (the default tricms-setup/tricms_provision.py sets
+// up for github_dispatch webhooks) never received a single delivery no
+// matter how much content got created, edited, or published.
+func TestWebhookDispatch_FiresOnContentPublish(t *testing.T) {
+	e := newTestEnv(t)
+	concepteur := e.createUser("wp1@x.com", false)
+	admin := e.createUser("wp2@x.com", true)
+	p := e.createProject("PublishDispatch")
+	e.setRole(concepteur.ID, p.ID, storage.RoleConcepteur)
+	setupSchema(t, e, p.ID, concepteur, "note", trischema.Definition{Fields: []trischema.Field{
+		{Key: "body", Type: trischema.Text, Cardinality: trischema.Simple},
+	}})
+
+	received := make(chan string, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Get("X-TriCMS-Event")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	rec := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		URL: srv.URL, Secret: "s", Events: []string{"content.publish"},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+
+	// Created as a draft: must NOT fire content.publish.
+	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/contents/note", concepteur, contentRequest{
+		Data: map[string]any{"body": "hi"}, Status: storage.StatusDraft,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	created := decodeBody[contentResponse](t, rec)
+
+	select {
+	case ev := <-received:
+		t.Fatalf("expected no delivery for a draft creation, got %q", ev)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// Publishing it must fire content.publish.
+	rec = e.request(http.MethodPut, "/api/v1/projects/"+p.ID+"/contents/note/"+created.ID, concepteur, contentRequest{
+		Data: map[string]any{"body": "hi"}, Status: storage.StatusPublished,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	select {
+	case ev := <-received:
+		if ev != "content.publish" {
+			t.Fatalf("expected content.publish event, got %q", ev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for content.publish delivery")
+	}
+}
+
 func TestServer_CloseAndForgetProjectDB(t *testing.T) {
 	e := newTestEnv(t)
 	p := e.createProject("Closeable")

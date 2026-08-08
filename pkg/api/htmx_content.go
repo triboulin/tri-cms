@@ -573,9 +573,10 @@ func (s *Server) htmxCreateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.create", map[string]string{"schema": slug, "id": c.ID})
-	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentCreate, map[string]string{"id": c.ID, "schema": slug})
+	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentCreate, map[string]string{"id": c.ID, "schema": slug})
+	deploying = s.dispatchContentStatusEvent(r.Context(), project.ID, slug, c.ID, storage.StatusDraft, c.Status) || deploying
 
-	redirectWithFlash(w, r, listPath, "Contenu créé.", "success")
+	redirectWithFlash(w, r, listPath, saveFlashMessage("Contenu créé.", deploying), "success")
 }
 
 func (s *Server) htmxUpdateContent(w http.ResponseWriter, r *http.Request) {
@@ -641,6 +642,7 @@ func (s *Server) htmxUpdateContent(w http.ResponseWriter, r *http.Request) {
 		fail("Erreur d'encodage.")
 		return
 	}
+	previousStatus := existing.Status
 	existing.Data = string(dataJSON)
 	existing.Status = status
 	if err := db.UpdateContent(r.Context(), existing); err != nil {
@@ -648,9 +650,10 @@ func (s *Server) htmxUpdateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.update", map[string]string{"schema": slug, "id": contentID})
-	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
+	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
+	deploying = s.dispatchContentStatusEvent(r.Context(), project.ID, slug, contentID, previousStatus, status) || deploying
 
-	redirectWithFlash(w, r, listPath, "Contenu mis à jour.", "success")
+	redirectWithFlash(w, r, listPath, saveFlashMessage("Contenu mis à jour.", deploying), "success")
 }
 
 func (s *Server) htmxDeleteContent(w http.ResponseWriter, r *http.Request) {
@@ -687,8 +690,8 @@ func (s *Server) htmxDeleteContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.delete", map[string]string{"schema": slug, "id": contentID})
-	s.dispatchWebhooksAsync(project.ID, webhooks.EventContentDelete, map[string]string{"id": contentID, "schema": slug})
-	redirectWithFlash(w, r, listPath, "Contenu supprimé.", "success")
+	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentDelete, map[string]string{"id": contentID, "schema": slug})
+	redirectWithFlash(w, r, listPath, saveFlashMessage("Contenu supprimé.", deploying), "success")
 }
 
 func (s *Server) htmxToggleContentStatus(w http.ResponseWriter, r *http.Request) {
@@ -710,6 +713,7 @@ func (s *Server) htmxToggleContentStatus(w http.ResponseWriter, r *http.Request)
 		writeHTMXStorageError(w, r, err, listPath)
 		return
 	}
+	previousStatus := c.Status
 	if c.Status == storage.StatusPublished {
 		c.Status = storage.StatusDraft
 	} else {
@@ -720,7 +724,9 @@ func (s *Server) htmxToggleContentStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.update", map[string]string{"schema": slug, "id": contentID, "status": string(c.Status)})
-	redirectWithFlash(w, r, listPath, "Statut mis à jour : "+string(c.Status)+".", "success")
+	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
+	deploying = s.dispatchContentStatusEvent(r.Context(), project.ID, slug, contentID, previousStatus, c.Status) || deploying
+	redirectWithFlash(w, r, listPath, saveFlashMessage("Statut mis à jour : "+string(c.Status)+".", deploying), "success")
 }
 
 func jsonTimestamp() string {

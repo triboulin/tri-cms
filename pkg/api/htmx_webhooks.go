@@ -39,6 +39,14 @@ func webhookEventOptions(selected []string) []webhookEventOption {
 	return opts
 }
 
+// webhookDeliveryVM adds a human-readable label (kind + target) to a raw
+// storage.WebhookDelivery for display, since the history can outlive the
+// webhook it refers to (deleted webhooks still show up by ID).
+type webhookDeliveryVM struct {
+	WebhookLabel string
+	Delivery     *storage.WebhookDelivery
+}
+
 type webhookRowVM struct {
 	Webhook     *storage.Webhook
 	Events      []webhookEventOption
@@ -73,8 +81,10 @@ func (s *Server) htmxWebhooks(w http.ResponseWriter, r *http.Request) {
 		s.htmxServerError(w, r)
 		return
 	}
+	whByID := make(map[string]*storage.Webhook, len(whs))
 	rows := make([]webhookRowVM, 0, len(whs))
 	for _, wh := range whs {
+		whByID[wh.ID] = wh
 		owner, repo := githubDispatchDisplayFields(wh)
 		rows = append(rows, webhookRowVM{
 			Webhook:     wh,
@@ -84,10 +94,38 @@ func (s *Server) htmxWebhooks(w http.ResponseWriter, r *http.Request) {
 			GitHubRepo:  repo,
 		})
 	}
+
+	// Delivery history (spec: debug tooling for "why isn't my webhook
+	// firing" -- previously the only trace of a delivery was a failure
+	// logged in the generic, project-wide /logs page, with no way to tell
+	// "no webhook is subscribed to this event" apart from "it's failing"
+	// apart from "it's actually working").
+	deliveries, err := s.System.ListWebhookDeliveries(r.Context(), project.ID, 50)
+	if err != nil {
+		s.htmxServerError(w, r)
+		return
+	}
+	deliveryRows := make([]webhookDeliveryVM, 0, len(deliveries))
+	for _, d := range deliveries {
+		label := d.WebhookID
+		if wh, ok := whByID[d.WebhookID]; ok {
+			label = wh.Kind + " " + wh.URL
+			if wh.Kind == webhooks.KindGitHubDispatch {
+				owner, repo := githubDispatchDisplayFields(wh)
+				label = "github_dispatch " + owner + "/" + repo
+			}
+		}
+		deliveryRows = append(deliveryRows, webhookDeliveryVM{
+			WebhookLabel: label,
+			Delivery:     d,
+		})
+	}
+
 	content := struct {
 		Webhooks        []webhookRowVM
 		NewEventOptions []webhookEventOption
-	}{rows, webhookEventOptions(nil)}
+		Deliveries      []webhookDeliveryVM
+	}{rows, webhookEventOptions(nil), deliveryRows}
 
 	data, err := s.buildPageData(r.Context(), user, project, "webhooks", "", content)
 	if err != nil {

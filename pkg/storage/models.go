@@ -40,6 +40,12 @@ type User struct {
 	Email         string    `json:"email"`
 	PasswordHash  string    `json:"-"`
 	IsGlobalAdmin bool      `json:"is_global_admin"`
+	// LastProjectID is the project this user last successfully opened (see
+	// SystemDB.SetLastProject, updated from loadProjectForHTMX on every
+	// project-scoped page view). Used to send non-admin users straight back
+	// into their project instead of a generic "Mes projets" landing page --
+	// non-admins can't create projects and only ever work within one anyway.
+	LastProjectID *string   `json:"last_project_id,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -78,6 +84,25 @@ type Webhook struct {
 	Config    string    `json:"-"`    // raw JSON, kind-specific (e.g. github_dispatch owner/repo/token); token is encrypted at rest, never serialized as-is -- see pkg/api masking
 	Events    []string  `json:"events"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// WebhookDelivery is one recorded attempt sequence at delivering an event to
+// a webhook (see pkg/webhooks.Dispatcher.Send / Result). Unlike GlobalLog
+// (which only ever recorded delivery *failures*, as a side note in the
+// generic audit trail), every attempt -- success or failure -- is recorded
+// here, so the Webhooks page can show a real history: without it there was
+// no way to tell "no webhook is subscribed to this event" apart from "the
+// webhook is subscribed but silently failing" apart from "it worked fine".
+type WebhookDelivery struct {
+	ID         int64     `json:"id"`
+	WebhookID  string    `json:"webhook_id"`
+	ProjectID  string    `json:"project_id"`
+	Event      string    `json:"event"`
+	Success    bool      `json:"success"`
+	Attempts   int       `json:"attempts"`
+	StatusCode int       `json:"status_code"`
+	Error      string    `json:"error"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type GlobalLog struct {

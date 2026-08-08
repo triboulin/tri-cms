@@ -13,6 +13,7 @@ import (
 
 	"tricms/pkg/auth"
 	"tricms/pkg/storage"
+	"tricms/pkg/webhooks"
 )
 
 // mediaRowVM decorates a stored media with view-only fields: a human-sized
@@ -184,7 +185,8 @@ func (s *Server) htmxUploadMedia(w http.ResponseWriter, r *http.Request) {
 		redirectWithFlash(w, r, back, "Impossible d'enregistrer le média : "+err.Error(), "error")
 		return
 	}
-	redirectWithFlash(w, r, back, "Média « "+header.Filename+" » téléversé.", "success")
+	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaCreate, map[string]string{"id": m.ID, "filename": m.Filename})
+	redirectWithFlash(w, r, back, saveFlashMessage("Média « "+header.Filename+" » téléversé.", deploying), "success")
 }
 
 func (s *Server) htmxDeleteMedia(w http.ResponseWriter, r *http.Request) {
@@ -210,5 +212,6 @@ func (s *Server) htmxDeleteMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = os.Remove(filepath.Join(s.Manager.ProjectMediaDir(project.ID), m.FilePath))
-	redirectWithFlash(w, r, back, "Média « "+m.Filename+" » supprimé.", "success")
+	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaDelete, map[string]string{"id": mediaID, "filename": m.Filename})
+	redirectWithFlash(w, r, back, saveFlashMessage("Média « "+m.Filename+" » supprimé.", deploying), "success")
 }

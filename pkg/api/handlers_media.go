@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"tricms/pkg/storage"
+	"tricms/pkg/webhooks"
 )
 
 // handleListMedias lists every media asset of the in-scope project.
@@ -88,6 +89,7 @@ func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 		writeStorageError(w, err)
 		return
 	}
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaCreate, map[string]string{"id": m.ID, "filename": m.Filename})
 	writeJSON(w, http.StatusCreated, m)
 }
 
@@ -112,5 +114,6 @@ func (s *Server) handleDeleteMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = os.Remove(filepath.Join(s.Manager.ProjectMediaDir(project.ID), m.FilePath))
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaDelete, map[string]string{"id": mediaID, "filename": m.Filename})
 	w.WriteHeader(http.StatusNoContent)
 }

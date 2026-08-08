@@ -102,18 +102,75 @@ func TestHTMX_LoginSubmitWrongPassword(t *testing.T) {
 	}
 }
 
-func TestHTMX_Dashboard_ListsProjects(t *testing.T) {
+func TestHTMX_Dashboard_ListsProjectsForAdmin(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	admin := e.createUser("dash-admin@x.com", true)
+	e.createProject("Dashboard Project")
+
+	rec := e.getHTML("/", admin)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Dashboard Project") {
+		t.Fatalf("expected project listed, got %s", rec.Body.String())
+	}
+}
+
+// Non-admins can't create projects and gain nothing from the "Mes projets"
+// landing page beyond what the breadcrumb project switcher already offers,
+// so "/" sends them straight into a project instead: the one they last had
+// open (see TestHTMX_Dashboard_RedirectsNonAdminToLastProject), or the first
+// one they can access on a first connection.
+func TestHTMX_Dashboard_RedirectsNonAdminToFirstProject(t *testing.T) {
 	e := newHTMXTestEnv(t)
 	u := e.createUser("dash@x.com", false)
 	p := e.createProject("Dashboard Project")
 	e.setRole(u.ID, p.ID, storage.RoleRedacteur)
 
 	rec := e.getHTML("/", u)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/projects/"+p.ID {
+		t.Fatalf("expected redirect to project, got %q", got)
+	}
+}
+
+func TestHTMX_Dashboard_RedirectsNonAdminToLastProject(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	u := e.createUser("dash2@x.com", false)
+	p1 := e.createProject("First Project")
+	p2 := e.createProject("Second Project")
+	e.setRole(u.ID, p1.ID, storage.RoleRedacteur)
+	e.setRole(u.ID, p2.ID, storage.RoleRedacteur)
+
+	// Visiting p2 records it as the last-opened project.
+	if rec := e.getHTML("/projects/"+p2.ID, u); rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 opening second project, got %d", rec.Code)
+	}
+
+	rec := e.getHTML("/", u)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Location"); got != "/projects/"+p2.ID {
+		t.Fatalf("expected redirect to last-opened project, got %q", got)
+	}
+}
+
+// A non-admin with no project access at all still lands on the plain
+// dashboard (with its "no projects" message) since there's nowhere else to
+// send them.
+func TestHTMX_Dashboard_NonAdminWithNoProjectsSeesEmptyState(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	u := e.createUser("dash3@x.com", false)
+
+	rec := e.getHTML("/", u)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Dashboard Project") {
-		t.Fatalf("expected project listed, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "Aucun projet accessible") {
+		t.Fatalf("expected empty-state message, got %s", rec.Body.String())
 	}
 }
 

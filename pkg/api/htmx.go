@@ -168,7 +168,42 @@ func (s *Server) htmxDashboard(w http.ResponseWriter, r *http.Request) {
 		redirectToLogin(w, r)
 		return
 	}
-	data, err := s.buildPageData(r.Context(), user, nil, "", "Mes projets", nil)
+
+	// Non-admins can't create projects (see htmxCreateProject) and the
+	// dashboard's only other purpose is the project switcher -- which is
+	// already reachable from the breadcrumb dropdown on every page. Sending
+	// them here first just adds a click before they can do anything useful,
+	// so send them straight into a project instead: the one they last had
+	// open, or the first one they can access on a first connection.
+	if !user.IsGlobalAdmin {
+		projects, err := s.System.ListProjectsForUser(r.Context(), user.ID, user.IsGlobalAdmin)
+		if err != nil {
+			s.htmxServerError(w, r)
+			return
+		}
+		if len(projects) > 0 {
+			target := projects[0].ID
+			if user.LastProjectID != nil {
+				for _, p := range projects {
+					if p.ID == *user.LastProjectID {
+						target = p.ID
+						break
+					}
+				}
+			}
+			http.Redirect(w, r, "/projects/"+target, http.StatusSeeOther)
+			return
+		}
+	}
+
+	// The "+ Nouveau projet" breadcrumb link points here with ?view=create
+	// so the leaf reflects the form actually in view, instead of always
+	// showing the generic "Mes projets" label even while creating a project.
+	leaf := "Mes projets"
+	if r.URL.Query().Get("view") == "create" && user.IsGlobalAdmin {
+		leaf = "Nouveau projet"
+	}
+	data, err := s.buildPageData(r.Context(), user, nil, "", leaf, nil)
 	if err != nil {
 		s.htmxServerError(w, r)
 		return
@@ -247,6 +282,9 @@ func (s *Server) loadProjectForHTMX(w http.ResponseWriter, r *http.Request, sect
 	if !auth.CanAccessSection(user.IsGlobalAdmin, role, section) {
 		http.Error(w, "403 forbidden", http.StatusForbidden)
 		return nil, nil
+	}
+	if user.LastProjectID == nil || *user.LastProjectID != project.ID {
+		_ = s.System.SetLastProject(r.Context(), user.ID, project.ID)
 	}
 	return user, project
 }

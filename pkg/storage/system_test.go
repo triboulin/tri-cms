@@ -280,6 +280,68 @@ func TestSystemDB_Webhooks(t *testing.T) {
 	}
 }
 
+func TestSystemDB_WebhookDeliveries(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	proj := &Project{ID: "proj_whd", Name: "WHD", FolderPath: "./data/projects/proj_whd"}
+	if err := db.CreateProject(ctx, proj); err != nil {
+		t.Fatal(err)
+	}
+
+	ok := &WebhookDelivery{WebhookID: "wh1", ProjectID: proj.ID, Event: "content.publish", Success: true, Attempts: 1, StatusCode: 200}
+	if err := db.RecordWebhookDelivery(ctx, ok); err != nil {
+		t.Fatalf("record success: %v", err)
+	}
+	failed := &WebhookDelivery{WebhookID: "wh1", ProjectID: proj.ID, Event: "content.publish", Success: false, Attempts: 5, StatusCode: 500, Error: "unexpected status code 500"}
+	if err := db.RecordWebhookDelivery(ctx, failed); err != nil {
+		t.Fatalf("record failure: %v", err)
+	}
+
+	deliveries, err := db.ListWebhookDeliveries(ctx, proj.ID, 10)
+	if err != nil || len(deliveries) != 2 {
+		t.Fatalf("expected 2 deliveries: %v (%d)", err, len(deliveries))
+	}
+	// Newest first.
+	if deliveries[0].Success || deliveries[0].Error == "" {
+		t.Fatalf("expected the failed delivery first (most recent): %+v", deliveries[0])
+	}
+	if !deliveries[1].Success || deliveries[1].StatusCode != 200 {
+		t.Fatalf("expected the successful delivery second: %+v", deliveries[1])
+	}
+
+	limited, err := db.ListWebhookDeliveries(ctx, proj.ID, 1)
+	if err != nil || len(limited) != 1 {
+		t.Fatalf("expected limit to be honored: %v (%d)", err, len(limited))
+	}
+
+	other, err := db.ListWebhookDeliveries(ctx, "some-other-project", 10)
+	if err != nil || len(other) != 0 {
+		t.Fatalf("expected deliveries scoped to their project: %v (%d)", err, len(other))
+	}
+}
+
+func TestSystemDB_SetLastProject(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	u := &User{ID: uuid.NewString(), Email: "lastproj@example.com", PasswordHash: "hash"}
+	if err := db.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := db.GetUserByID(ctx, u.ID)
+	if got.LastProjectID != nil {
+		t.Fatalf("expected no last project initially, got %+v", got.LastProjectID)
+	}
+
+	if err := db.SetLastProject(ctx, u.ID, "proj_abc"); err != nil {
+		t.Fatalf("set last project: %v", err)
+	}
+	got2, _ := db.GetUserByID(ctx, u.ID)
+	if got2.LastProjectID == nil || *got2.LastProjectID != "proj_abc" {
+		t.Fatalf("expected last project proj_abc, got %+v", got2.LastProjectID)
+	}
+}
+
 func TestSystemDB_Webhook_GithubDispatchKind(t *testing.T) {
 	ctx := context.Background()
 	db := newTestSystemDB(t)

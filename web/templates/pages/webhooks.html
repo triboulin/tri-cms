@@ -56,6 +56,38 @@
         {{end}}
       {{end}}
 
+      <div class="tri-card" id="webhook-history"
+           hx-get="/projects/{{.CurrentProject.ID}}/webhooks" hx-trigger="every 5s" hx-select="#webhook-history" hx-swap="outerHTML">
+        <h3><span class="material-icons" aria-hidden="true">history</span> Historique des envois</h3>
+        {{if not .Content.Deliveries}}
+          <p class="tri-empty">Aucun envoi enregistré pour le moment. Un envoi n'apparaît ici que si au moins un webhook est abonné à l'évènement déclenché.</p>
+        {{else}}
+        <div class="tri-table-scroll">
+        <table class="tri-table">
+          <thead><tr><th>Date</th><th>Webhook</th><th>Évènement</th><th>Statut</th><th>Tentatives</th><th>Détail</th></tr></thead>
+          <tbody>
+            {{range .Content.Deliveries}}
+            <tr>
+              <td>{{.Delivery.CreatedAt.Format "02/01 15:04:05"}}</td>
+              <td>{{.WebhookLabel}}</td>
+              <td>{{.Delivery.Event}}</td>
+              <td>
+                {{if .Delivery.Success}}
+                  <span class="tri-badge tri-badge-success">OK</span>
+                {{else}}
+                  <span class="tri-badge tri-badge-danger">Échec</span>
+                {{end}}
+              </td>
+              <td>{{.Delivery.Attempts}}</td>
+              <td>{{if .Delivery.StatusCode}}HTTP {{.Delivery.StatusCode}}{{end}} {{.Delivery.Error}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+        </div>
+        {{end}}
+      </div>
+
       <div class="tri-card" id="create">
         <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau webhook</h3>
         <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/webhooks/create">

@@ -55,7 +55,7 @@
       {{end}}
       {{if .User.IsGlobalAdmin}}
       {{if .Projects}}<div class="tri-crumb-dropdown-sep"></div>{{end}}
-      <a href="/#create"><span class="material-icons" aria-hidden="true">add</span> Nouveau projet</a>
+      <a href="/?view=create#create"><span class="material-icons" aria-hidden="true">add</span> Nouveau projet</a>
       <a href="/admin/projects" class="{{if .IsAdmin}}active{{end}}"><span class="material-icons" aria-hidden="true">admin_panel_settings</span> Administration</a>
       {{end}}
     </div>

@@ -125,6 +125,8 @@ table.tri-table td.tri-actions { text-align: right; white-space: nowrap; }
   display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
   border: 1px solid var(--tri-border); color: var(--tri-muted);
 }
+.tri-badge-success { background: var(--tri-success); }
+.tri-badge-danger { background: var(--tri-danger); }
 .tri-btn {
   background: var(--tri-accent); color: #fff; border: none; border-radius: 6px;
   padding: 8px 14px; cursor: pointer; font-size: 0.88rem; text-decoration: none;
@@ -344,10 +346,14 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 }
 @keyframes tri-spin { to { transform: rotate(360deg); } }
 
-/* Confirmation modal, replacing native confirm()/prompt() (see app.js). */
+/* Confirmation modal, replacing native confirm()/prompt() (see app.js). It's
+   always a *reaction* to something the user just clicked -- often a delete
+   button sitting inside the content-edit modal (z-index 150) or the media
+   picker (z-index 200) -- so it must outrank every other overlay in the app,
+   not just sit at an arbitrary base z-index. */
 .tri-modal-overlay {
   display: none; position: fixed; inset: 0; background: rgba(29,31,37,0.45);
-  align-items: center; justify-content: center; z-index: 100; padding: 16px;
+  align-items: center; justify-content: center; z-index: 300; padding: 16px;
 }
 .tri-modal-overlay.show { display: flex; }
 .tri-modal {

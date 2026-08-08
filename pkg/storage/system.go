@@ -61,6 +61,19 @@ CREATE TABLE IF NOT EXISTS global_logs (
     details JSON,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    webhook_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    event TEXT NOT NULL,
+    success BOOLEAN NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    status_code INTEGER NOT NULL DEFAULT 0,
+    error TEXT NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_project ON webhook_deliveries(project_id, created_at DESC);
 `
 
 // SystemDB wraps the global system.db connection.
@@ -91,7 +104,21 @@ func OpenSystemDB(dsn string) (*SystemDB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate system db: %w", err)
 	}
+	if err := migrateUserColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate system db: %w", err)
+	}
 	return &SystemDB{db: db}, nil
+}
+
+// migrateUserColumns adds last_project_id to pre-existing users tables, the
+// same pattern as migrateWebhookColumns above.
+func migrateUserColumns(db *sql.DB) error {
+	_, err := db.Exec(`ALTER TABLE users ADD COLUMN last_project_id TEXT`)
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+		return err
+	}
+	return nil
 }
 
 // migrateWebhookColumns adds the kind/config columns to pre-existing
@@ -147,31 +174,35 @@ func (s *SystemDB) CreateUser(ctx context.Context, u *User) error {
 
 func (s *SystemDB) GetUserByID(ctx context.Context, id string) (*User, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, is_global_admin, created_at FROM users WHERE id = ?`, id)
+		`SELECT id, email, password_hash, is_global_admin, last_project_id, created_at FROM users WHERE id = ?`, id)
 	return scanUser(row)
 }
 
 func (s *SystemDB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, is_global_admin, created_at FROM users WHERE email = ?`,
+		`SELECT id, email, password_hash, is_global_admin, last_project_id, created_at FROM users WHERE email = ?`,
 		strings.ToLower(email))
 	return scanUser(row)
 }
 
 func scanUser(row *sql.Row) (*User, error) {
 	var u User
-	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsGlobalAdmin, &u.CreatedAt); err != nil {
+	var lastProjectID sql.NullString
+	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsGlobalAdmin, &lastProjectID, &u.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
 		return nil, err
+	}
+	if lastProjectID.Valid {
+		u.LastProjectID = &lastProjectID.String
 	}
 	return &u, nil
 }
 
 func (s *SystemDB) ListUsers(ctx context.Context) ([]*User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, email, password_hash, is_global_admin, created_at FROM users ORDER BY created_at`)
+		`SELECT id, email, password_hash, is_global_admin, last_project_id, created_at FROM users ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -179,12 +210,24 @@ func (s *SystemDB) ListUsers(ctx context.Context) ([]*User, error) {
 	var out []*User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsGlobalAdmin, &u.CreatedAt); err != nil {
+		var lastProjectID sql.NullString
+		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.IsGlobalAdmin, &lastProjectID, &u.CreatedAt); err != nil {
 			return nil, err
+		}
+		if lastProjectID.Valid {
+			u.LastProjectID = &lastProjectID.String
 		}
 		out = append(out, &u)
 	}
 	return out, rows.Err()
+}
+
+// SetLastProject records the project a user last successfully opened, so a
+// non-admin can be sent straight back into it instead of a generic project
+// list (see User.LastProjectID doc comment).
+func (s *SystemDB) SetLastProject(ctx context.Context, userID, projectID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET last_project_id = ? WHERE id = ?`, projectID, userID)
+	return err
 }
 
 func (s *SystemDB) UpdateUserPassword(ctx context.Context, id, passwordHash string) error {
@@ -497,6 +540,41 @@ func (s *SystemDB) DeleteWebhook(ctx context.Context, id string) error {
 		return err
 	}
 	return checkRowsAffected(res)
+}
+
+// ---- Webhook deliveries (history) ----
+
+// RecordWebhookDelivery persists one delivery attempt sequence, successful
+// or not, so the Webhooks page can show a real history (see WebhookDelivery
+// doc comment for why this exists alongside global_logs rather than
+// reusing it).
+func (s *SystemDB) RecordWebhookDelivery(ctx context.Context, d *WebhookDelivery) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO webhook_deliveries (webhook_id, project_id, event, success, attempts, status_code, error) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		d.WebhookID, d.ProjectID, d.Event, d.Success, d.Attempts, d.StatusCode, d.Error)
+	return err
+}
+
+// ListWebhookDeliveries returns the most recent deliveries for a project
+// (across all of its webhooks), newest first, capped at limit.
+func (s *SystemDB) ListWebhookDeliveries(ctx context.Context, projectID string, limit int) ([]*WebhookDelivery, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, webhook_id, project_id, event, success, attempts, status_code, error, created_at
+		 FROM webhook_deliveries WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+		projectID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*WebhookDelivery
+	for rows.Next() {
+		var d WebhookDelivery
+		if err := rows.Scan(&d.ID, &d.WebhookID, &d.ProjectID, &d.Event, &d.Success, &d.Attempts, &d.StatusCode, &d.Error, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &d)
+	}
+	return out, rows.Err()
 }
 
 // ---- Global Logs ----
