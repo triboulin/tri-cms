@@ -69,7 +69,6 @@ persistence:
 env:
   TRICMS_ENCRYPTION_KEY: ""
   TRICMS_BOOTSTRAP_EMAIL: ""
-  TRICMS_BOOTSTRAP_PASSWORD: ""
   # Optionnel : limite de taille d'upload en Mo (voir cmd/tricms/main.go).
   # Non sensible, donc passée en var.TRICMS_MAX_UPLOAD_MB depuis la CI plutôt
   # qu'en secret.

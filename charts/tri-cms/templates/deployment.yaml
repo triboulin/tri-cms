@@ -37,7 +37,7 @@ spec:
           {{- if .Values.env }}
           env:
             {{- range $key, $value := .Values.env }}
-            {{- if and $value (or (eq $key "TRICMS_ENCRYPTION_KEY") (eq $key "TRICMS_BOOTSTRAP_PASSWORD")) }}
+            {{- if and $value (eq $key "TRICMS_ENCRYPTION_KEY") }}
             - name: {{ $key }}
               valueFrom:
                 secretKeyRef:

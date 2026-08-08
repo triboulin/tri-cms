@@ -53,6 +53,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not issue session")
 		return
 	}
+	s.clearBootstrapFlag()
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     s.SessionCookieName,

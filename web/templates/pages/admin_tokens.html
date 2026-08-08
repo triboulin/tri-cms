@@ -88,6 +88,7 @@
 
         <details class="tri-details" open>
           <summary>Projets</summary>
+          <div class="tri-table-scroll">
           <table class="tri-table tri-api-doc-table">
             <tbody>
               <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects</code></td><td>Lister les projets accessibles</td></tr>
@@ -95,10 +96,12 @@
               <tr><td><span class="tri-badge-outline">—</span></td><td><code>/projects/{project_id}</code></td><td>Pas de suppression via l'API, volontairement -- utilisez Administration&nbsp;›&nbsp;Projets (double confirmation)</td></tr>
             </tbody>
           </table>
+          </div>
         </details>
 
         <details class="tri-details">
           <summary>Schémas &amp; contenus</summary>
+          <div class="tri-table-scroll">
           <table class="tri-table tri-api-doc-table">
             <tbody>
               <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{project_id}/schemas" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{project_id}/schemas</code></td><td>Lister les schémas du projet</td></tr>
@@ -111,10 +114,12 @@
               <tr class="tri-api-doc-row" data-method="DELETE" data-path="/api/v1/projects/{project_id}/contents/{slug}/{id}" data-body=""><td><span class="tri-badge tri-method-delete">DELETE</span></td><td><code>/projects/{project_id}/contents/{slug}/{id}</code></td><td>Supprimer un contenu</td></tr>
             </tbody>
           </table>
+          </div>
         </details>
 
         <details class="tri-details">
           <summary>Médias &amp; utilisateurs</summary>
+          <div class="tri-table-scroll">
           <table class="tri-table tri-api-doc-table">
             <tbody>
               <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/projects/{project_id}/medias" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/projects/{project_id}/medias</code></td><td>Lister les médias</td></tr>
@@ -124,10 +129,12 @@
               <tr class="tri-api-doc-row" data-method="POST" data-path="/api/v1/projects/{project_id}/users" data-body='{"email":"user@example.com","role":"REDACTEUR"}'><td><span class="tri-badge tri-method-post">POST</span></td><td><code>/projects/{project_id}/users</code></td><td>Attribuer un rôle</td></tr>
             </tbody>
           </table>
+          </div>
         </details>
 
         <details class="tri-details">
           <summary>Tokens, webhooks &amp; compte</summary>
+          <div class="tri-table-scroll">
           <table class="tri-table tri-api-doc-table">
             <tbody>
               <tr class="tri-api-doc-row" data-method="GET" data-path="/api/v1/me" data-body=""><td><span class="tri-badge tri-method-get">GET</span></td><td><code>/me</code></td><td>Identité courante (utilisateur ou token)</td></tr>
@@ -137,6 +144,7 @@
               <tr class="tri-api-doc-row" data-method="POST" data-path="/api/v1/projects/{project_id}/webhooks" data-body='{"url":"https://example.com/hook","secret":"s3cret","events":["content.create","content.delete"]}'><td><span class="tri-badge tri-method-post">POST</span></td><td><code>/projects/{project_id}/webhooks</code></td><td>Créer un webhook</td></tr>
             </tbody>
           </table>
+          </div>
         </details>
       </div>
     </div>

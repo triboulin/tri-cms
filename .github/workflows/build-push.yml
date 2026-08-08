@@ -87,7 +87,6 @@ jobs:
             --set ingress.host=cms.triboulin.fr \
             --set env.TRICMS_ENCRYPTION_KEY=${{ secrets.TRICMS_ENCRYPTION_KEY }} \
             --set env.TRICMS_BOOTSTRAP_EMAIL=${{ secrets.TRICMS_BOOTSTRAP_EMAIL }} \
-            --set env.TRICMS_BOOTSTRAP_PASSWORD=${{ secrets.TRICMS_BOOTSTRAP_PASSWORD }} \
             --set env.TRICMS_MAX_UPLOAD_MB=${{ vars.TRICMS_MAX_UPLOAD_MB }} \
             --atomic --wait \
             --namespace triboulin-fr \

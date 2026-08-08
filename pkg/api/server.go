@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"os"
 	"sync"
 
 	"tricms/pkg/auth"
@@ -39,8 +40,23 @@ type Server struct {
 	// so large-file support doesn't require a code change.
 	MaxUploadSize int64
 
+	// BootstrapFlagPath points at the file written by cmd/tricms/main.go
+	// when the first ADMIN account is auto-created. Empty disables the
+	// login-page password reveal (e.g. in tests).
+	BootstrapFlagPath string
+
 	mu         sync.Mutex
 	projectDBs map[string]*storage.ProjectDB
+}
+
+// clearBootstrapFlag deletes the one-time bootstrap flag file after its
+// first successful login use, so the generated password stops being shown
+// on the login page. A missing file is not an error.
+func (s *Server) clearBootstrapFlag() {
+	if s.BootstrapFlagPath == "" {
+		return
+	}
+	_ = os.Remove(s.BootstrapFlagPath)
 }
 
 // defaultMaxUploadSize is used when Server.MaxUploadSize is left unset.

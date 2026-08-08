@@ -18,6 +18,29 @@ body {
   font-family: -apple-system, Segoe UI, Roboto, sans-serif;
   background: var(--tri-bg);
   color: var(--tri-text);
+  position: relative;
+}
+/* Decorative light background shader: fixed, low-opacity pastel blobs that
+   drift slowly behind the (opaque) cards -- purely visual, never affects
+   contrast/readability of content sitting on top. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(45, 127, 249, 0.10), transparent 45%),
+    radial-gradient(circle at 85% 15%, rgba(124, 58, 237, 0.08), transparent 40%),
+    radial-gradient(circle at 50% 90%, rgba(22, 163, 74, 0.07), transparent 45%);
+  background-size: 200% 200%;
+  animation: tri-shader-drift 40s ease-in-out infinite;
+}
+@keyframes tri-shader-drift {
+  0%, 100% { background-position: 0% 0%, 100% 0%, 50% 100%; }
+  50% { background-position: 20% 10%, 80% 20%, 40% 80%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
 }
 .material-icons { font-size: 20px; line-height: 1; vertical-align: middle; }
 .tri-main { min-height: 100vh; display: flex; flex-direction: column; }
@@ -139,7 +162,8 @@ table.tri-table td.tri-actions { text-align: right; white-space: nowrap; }
 .tri-empty { color: var(--tri-muted); font-style: italic; padding: 8px 0; }
 .tri-login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .tri-error { color: var(--tri-danger); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
-.tri-notice { color: var(--tri-accent); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; font-size: 0.88rem; }
+.tri-notice { color: var(--tri-accent); margin-bottom: 10px; display: flex; align-items: flex-start; gap: 6px; font-size: 0.88rem; }
+.tri-notice-text { flex: 1; min-width: 0; word-break: break-word; }
 .tri-flash {
   display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px;
   margin-bottom: 16px; font-size: 0.9rem;
@@ -362,11 +386,30 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 .tri-table-scroll table.tri-table { min-width: 480px; }
 
 @media (max-width: 720px) {
-  .tri-topbar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .tri-topbar { align-items: flex-start; gap: 8px; padding: 10px 12px; }
   .tri-breadcrumb { flex-wrap: wrap; }
   .tri-content { padding: 14px; }
   .tri-form-row { flex-direction: column; gap: 0; }
   .tri-media-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
-  .tri-crumb-dropdown { left: auto; right: 0; }
+  /* Only the crumb(s) after the first one risk overflowing the right edge
+     on narrow screens -- the first crumb sits right after the logo, near
+     the left edge, so forcing it right-aligned pushed its dropdown off the
+     left side of the viewport instead. */
+  .tri-crumb ~ .tri-crumb .tri-crumb-dropdown { left: auto; right: 0; }
   .tri-table-filter { max-width: none; }
+  /* The email is redundant on mobile (Déconnexion is the only action that
+     matters, and horizontal space is tight); still present in the DOM for
+     screen readers via the surrounding topbar landmark. */
+  .tri-user-email { display: none; }
+  .tri-card { margin: 6px; padding: 12px; }
+  .tri-grid { gap: 8px; }
+}
+
+@media (max-width: 480px) {
+  .tri-content { padding: 10px; }
+  .tri-card { margin: 4px; padding: 10px; }
+  table.tri-table th, table.tri-table td { padding: 6px 8px; }
+  .tri-btn { padding: 7px 10px; font-size: 0.85rem; }
+  .tri-section-title { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .tri-media-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }

@@ -11,7 +11,7 @@ rendue côté serveur, et webhooks avec retries (livraison signée générique, 
 ## Démarrage rapide
 
 ```bash
-go build -o tricms ./cmd/tricms && TRICMS_ENCRYPTION_KEY="changeme4prd" && ./tricms
+go build -o tricms ./cmd/tricms && export TRICMS_ENCRYPTION_KEY="changeme4prd" && ./tricms
 ```
 ou sur Windows  :
 ```cmd
@@ -27,11 +27,12 @@ Variables d'environnement :
 | `TRICMS_DATA_DIR` | `./data` | Racine de `system.db` et `./data/projects/{id}/` |
 | `TRICMS_ENCRYPTION_KEY` | *(généré, éphémère)* | Clé de chiffrement (AES-256-GCM) des secrets stockés en base — actuellement le token GitHub des webhooks `kind=github_dispatch` — et source de dérivation de la clé de signature des sessions JWT. À fixer en production, sinon les sessions sont invalidées et ces tokens deviennent indéchiffrables à chaque redémarrage. |
 | `TRICMS_BOOTSTRAP_EMAIL` | `admin@tricms.local` | Email du premier compte ADMIN créé automatiquement si `system.db` est vide |
-| `TRICMS_BOOTSTRAP_PASSWORD` | *(généré aléatoirement)* | Mot de passe du premier compte ADMIN — optionnel, sinon un mot de passe est généré et affiché une seule fois dans les logs |
 
 Au premier démarrage sans utilisateur existant, un compte **ADMIN** est créé
-automatiquement ; l'email et le mot de passe généré sont affichés une seule
-fois dans les logs.
+automatiquement avec un mot de passe généré aléatoirement. Ce mot de passe est
+affiché sur la page de connexion (et une seule fois dans les logs) jusqu'à la
+première connexion réussie, moment auquel il est effacé et ne peut plus être
+récupéré.
 
 L'interface d'administration HTMX est servie sur `/` (redirige vers `/login`
 si non authentifié) ; l'API JSON est sous `/api/v1/*`.

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -77,6 +78,10 @@ func main() {
 	server := api.NewServer(system, manager, issuer, dispatcher, templates)
 	server.StaticFS = staticFS
 	server.Encryptor = encryptor
+	// Persisted under dataDir (not cwd) so the flag survives pod restarts on
+	// the same volume until it's cleared by a first successful login.
+	bootstrapFlagPath := filepath.Join(dataDir, "waitconnect-flag")
+	server.BootstrapFlagPath = bootstrapFlagPath
 	if maxUploadMB := os.Getenv("TRICMS_MAX_UPLOAD_MB"); maxUploadMB != "" {
 		if mb, err := strconv.ParseInt(maxUploadMB, 10, 64); err == nil && mb > 0 {
 			server.MaxUploadSize = mb << 20
@@ -86,7 +91,7 @@ func main() {
 	}
 	defer server.Close()
 
-	if err := bootstrapFirstAdmin(system); err != nil {
+	if err := bootstrapFirstAdmin(system, bootstrapFlagPath); err != nil {
 		log.Fatalf("bootstrap admin account: %v", err)
 	}
 
@@ -100,8 +105,9 @@ func main() {
 
 // bootstrapFirstAdmin creates a global ADMIN account on first run (empty
 // users table) so the instance isn't unreachable out of the box. The
-// generated password is printed once and must be changed after first login.
-func bootstrapFirstAdmin(system *storage.SystemDB) error {
+// generated password is written to flagPath and shown on the login page
+// (see pkg/api.htmxLoginPage) until it's used to log in for the first time.
+func bootstrapFirstAdmin(system *storage.SystemDB, flagPath string) error {
 	ctx := context.Background()
 	users, err := system.ListUsers(ctx)
 	if err != nil {
@@ -112,16 +118,11 @@ func bootstrapFirstAdmin(system *storage.SystemDB) error {
 	}
 
 	email := envOr("TRICMS_BOOTSTRAP_EMAIL", "admin@tricms.local")
-	password := os.Getenv("TRICMS_BOOTSTRAP_PASSWORD")
-	generated := password == ""
-	if generated {
-		var err error
-		password, err = randomSecret()
-		if err != nil {
-			return err
-		}
-		password = password[:16]
+	password, err := randomSecret()
+	if err != nil {
+		return err
 	}
+	password = password[:16]
 
 	hash, err := auth.HashPassword(password)
 	if err != nil {
@@ -132,15 +133,14 @@ func bootstrapFirstAdmin(system *storage.SystemDB) error {
 		return err
 	}
 
+	if err := api.WriteBootstrapFlag(flagPath, api.BootstrapFlag{Email: email, Password: password}); err != nil {
+		log.Printf("WARNING: could not write bootstrap flag %s: %v", flagPath, err)
+	}
+
 	log.Println("========================================================")
 	log.Println("No users found: created the first global ADMIN account.")
-	log.Printf("  email:    %s\n", email)
-	if generated {
-		log.Printf("  password: %s\n", password)
-		log.Println("Change this password immediately after logging in.")
-	} else {
-		log.Println("  password: (set via TRICMS_BOOTSTRAP_PASSWORD)")
-	}
+	log.Printf("  email: %s\n", email)
+	log.Println("The generated password is shown on the login page until first use.")
 	log.Println("========================================================")
 	return nil
 }

@@ -97,7 +97,10 @@ func redirectToLogin(w http.ResponseWriter, r *http.Request) {
 // named type (rather than ad hoc anonymous structs per call site) so every
 // render exposes the same fields to the template regardless of which code
 // path produced it.
-type loginPageContent struct{ Error, Notice string }
+type loginPageContent struct {
+	Error, Notice                     string
+	BootstrapEmail, BootstrapPassword string
+}
 
 func (s *Server) htmxLoginPage(w http.ResponseWriter, r *http.Request) {
 	if s.htmxCurrentUser(r) != nil {
@@ -108,7 +111,14 @@ func (s *Server) htmxLoginPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("notice") == "1" {
 		notice = "Veuillez vous connecter pour continuer."
 	}
-	data := &PageData{PageTitle: "Connexion", Content: loginPageContent{Notice: notice}}
+	content := loginPageContent{Notice: notice}
+	if s.BootstrapFlagPath != "" {
+		if flag, ok := readBootstrapFlag(s.BootstrapFlagPath); ok {
+			content.BootstrapEmail = flag.Email
+			content.BootstrapPassword = flag.Password
+		}
+	}
+	data := &PageData{PageTitle: "Connexion", Content: content}
 	s.render(w, "page:login", data)
 }
 
@@ -134,6 +144,7 @@ func (s *Server) htmxLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.htmxServerError(w, r)
 		return
 	}
+	s.clearBootstrapFlag()
 	http.SetCookie(w, &http.Cookie{
 		Name: s.SessionCookieName, Value: token, Path: "/", HttpOnly: true,
 		SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(24 * time.Hour),
