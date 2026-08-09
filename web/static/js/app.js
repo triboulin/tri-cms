@@ -16,6 +16,13 @@
 
   // ---- Breadcrumb dropdowns: click/keyboard, not just :hover ------------
 
+  // Touch devices synthesize a mouseenter right before the click on a first
+  // tap, so attaching real hover listeners there made the first tap open
+  // the menu and the immediately-following click close it again -- a second
+  // tap was needed to actually get in. Only wire up hover on pointers that
+  // truly support it (a mouse), so touch relies on click alone.
+  var supportsHover = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
   function closeAllCrumbs(except) {
     document.querySelectorAll('.tri-crumb.open').forEach(function (c) {
       if (c === except) return;
@@ -62,27 +69,29 @@
     // after a short grace period, cancelled if the pointer re-enters (either
     // back onto the label or onto the dropdown itself, since the dropdown is
     // a DOM child of this same element) before it fires.
-    var closeTimer = null;
-    function clearCloseTimer() {
-      if (closeTimer) {
-        clearTimeout(closeTimer);
-        closeTimer = null;
+    if (supportsHover) {
+      var closeTimer = null;
+      function clearCloseTimer() {
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+          closeTimer = null;
+        }
       }
+      hoverEl.addEventListener('mouseenter', function () {
+        clearCloseTimer();
+        closeAllCrumbs(crumb);
+        crumb.classList.add('open');
+        if (caret) caret.setAttribute('aria-expanded', 'true');
+      });
+      hoverEl.addEventListener('mouseleave', function () {
+        clearCloseTimer();
+        closeTimer = setTimeout(function () {
+          crumb.classList.remove('open');
+          if (caret) caret.setAttribute('aria-expanded', 'false');
+          closeTimer = null;
+        }, 300);
+      });
     }
-    hoverEl.addEventListener('mouseenter', function () {
-      clearCloseTimer();
-      closeAllCrumbs(crumb);
-      crumb.classList.add('open');
-      if (caret) caret.setAttribute('aria-expanded', 'true');
-    });
-    hoverEl.addEventListener('mouseleave', function () {
-      clearCloseTimer();
-      closeTimer = setTimeout(function () {
-        crumb.classList.remove('open');
-        if (caret) caret.setAttribute('aria-expanded', 'false');
-        closeTimer = null;
-      }, 300);
-    });
   });
 
   document.addEventListener('click', function () {

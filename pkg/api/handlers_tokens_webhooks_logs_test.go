@@ -220,12 +220,19 @@ func TestWebhooks_ValidationEdgeCases(t *testing.T) {
 		t.Fatalf("expected 400 for malformed body on create, got %d", rec.Code)
 	}
 
-	// No events at all.
+	// No events at all: defaults to every known event type rather than
+	// being rejected, since a webhook is meant to fire on everything unless
+	// the caller deliberately narrows it down.
 	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
 		Kind: "generic", URL: "https://example.com", Secret: "s",
 	})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing events, got %d", rec.Code)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for missing events (defaults to all), got %d", rec.Code)
+	}
+	whAllEvents := decodeBody[storage.Webhook](t, rec)
+	if len(whAllEvents.Events) != len(availableWebhookEvents()) {
+		t.Fatalf("expected webhook with omitted events to default to all %d events, got %d: %v",
+			len(availableWebhookEvents()), len(whAllEvents.Events), whAllEvents.Events)
 	}
 
 	// Generic kind missing url/secret.

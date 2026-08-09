@@ -125,7 +125,7 @@ func (s *Server) htmxWebhooks(w http.ResponseWriter, r *http.Request) {
 		Webhooks        []webhookRowVM
 		NewEventOptions []webhookEventOption
 		Deliveries      []webhookDeliveryVM
-	}{rows, webhookEventOptions(nil), deliveryRows}
+	}{rows, webhookEventOptions(availableWebhookEvents()), deliveryRows}
 
 	data, err := s.buildPageData(r.Context(), user, project, "webhooks", "", content)
 	if err != nil {
@@ -163,7 +163,7 @@ func (s *Server) htmxCreateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := webhookRequestFromForm(r)
-	kind, url, secret, config, problem := s.buildWebhookFields(req, nil)
+	kind, url, secret, config, problem := s.buildWebhookFields(&req, nil)
 	if problem != "" {
 		redirectWithFlash(w, r, back, problem, "error")
 		return
@@ -193,7 +193,7 @@ func (s *Server) htmxUpdateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := webhookRequestFromForm(r)
-	kind, url, secret, config, problem := s.buildWebhookFields(req, existing)
+	kind, url, secret, config, problem := s.buildWebhookFields(&req, existing)
 	if problem != "" {
 		redirectWithFlash(w, r, back, problem, "error")
 		return

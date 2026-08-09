@@ -44,9 +44,12 @@ type webhookRequest struct {
 // create) -- used to fall back to the previously stored, still-encrypted
 // GitHub token when req.GitHubToken is left blank on an update, so editing
 // a github_dispatch webhook's events doesn't force re-entering the PAT.
-func (s *Server) buildWebhookFields(req webhookRequest, existing *storage.Webhook) (kind, url, secret, config, problem string) {
+// req is taken by pointer so that an omitted/empty Events list can be
+// defaulted to every known event type -- a webhook subscribes to
+// everything unless the caller deliberately narrows it down.
+func (s *Server) buildWebhookFields(req *webhookRequest, existing *storage.Webhook) (kind, url, secret, config, problem string) {
 	if len(req.Events) == 0 {
-		return "", "", "", "", "at least one event is required"
+		req.Events = availableWebhookEvents()
 	}
 	kind = req.Kind
 	if kind == "" {
@@ -101,7 +104,7 @@ func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	kind, url, secret, config, problem := s.buildWebhookFields(req, nil)
+	kind, url, secret, config, problem := s.buildWebhookFields(&req, nil)
 	if problem != "" {
 		writeError(w, http.StatusBadRequest, problem)
 		return
@@ -128,7 +131,7 @@ func (s *Server) handleUpdateWebhook(w http.ResponseWriter, r *http.Request) {
 		writeStorageError(w, err)
 		return
 	}
-	kind, url, secret, config, problem := s.buildWebhookFields(req, existing)
+	kind, url, secret, config, problem := s.buildWebhookFields(&req, existing)
 	if problem != "" {
 		writeError(w, http.StatusBadRequest, problem)
 		return
