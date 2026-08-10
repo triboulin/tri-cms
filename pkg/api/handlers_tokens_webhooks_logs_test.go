@@ -130,6 +130,32 @@ func TestWebhooks_AdminOnlyCRUD(t *testing.T) {
 	}
 }
 
+// TestWebhooks_HTMXNewFormChecksAllEventsByDefault guards the HTMX
+// create-webhook form specifically (not just the JSON API's default in
+// buildWebhookFields): the "Nouveau webhook" checkbox list must render
+// every event pre-checked, since a webhook submitted as-is is meant to
+// subscribe to everything. A prior version of the template rendered the
+// options without ever emitting the `checked` attribute at all, even
+// though the handler passed Selected:true for each -- silently defeating
+// the default despite the underlying data being correct.
+func TestWebhooks_HTMXNewFormChecksAllEventsByDefault(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	admin := e.createUser("wform1@x.com", true)
+	p := e.createProject("FormDefaults")
+
+	rec := e.getHTML("/projects/"+p.ID+"/webhooks", admin)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for webhooks page, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, event := range availableWebhookEvents() {
+		needle := `value="` + event + `" checked`
+		if !strings.Contains(body, needle) {
+			t.Fatalf("expected new-webhook form to pre-check %q (looking for %q), got: %s", event, needle, body)
+		}
+	}
+}
+
 // TestWebhooks_GitHubDispatchKind covers the github_dispatch webhook kind:
 // creation requires owner/repo/token, the token round-trips encrypted (it
 // must never appear verbatim in storage or in any API response), and

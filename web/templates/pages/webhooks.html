@@ -116,7 +116,7 @@
           <label>Évènements</label>
           <div class="tri-checkbox-list">
             {{range .Content.NewEventOptions}}
-              <label><input type="checkbox" name="events" value="{{.Value}}"> {{.Value}}</label>
+              <label><input type="checkbox" name="events" value="{{.Value}}" {{if .Selected}}checked{{end}}> {{.Value}}</label>
             {{end}}
           </div>
           <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Créer</button>
