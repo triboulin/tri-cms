@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     deploy_status TEXT NOT NULL DEFAULT '',
     deploy_conclusion TEXT NOT NULL DEFAULT '',
     deploy_run_url TEXT NOT NULL DEFAULT '',
+    deploy_resolved_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_project ON webhook_deliveries(project_id, created_at DESC);
@@ -176,6 +177,7 @@ func migrateWebhookDeliveryColumns(db *sql.DB) error {
 		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_status TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_conclusion TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_run_url TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_resolved_at DATETIME`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
@@ -656,12 +658,27 @@ func (s *SystemDB) RecordWebhookDelivery(ctx context.Context, d *WebhookDelivery
 	return err
 }
 
+const webhookDeliveryColumns = `id, webhook_id, project_id, event, success, attempts, status_code, error,
+	deploy_run_id, deploy_status, deploy_conclusion, deploy_run_url, deploy_resolved_at, created_at`
+
+func scanWebhookDelivery(row interface{ Scan(...any) error }) (*WebhookDelivery, error) {
+	var d WebhookDelivery
+	var resolvedAt sql.NullTime
+	if err := row.Scan(&d.ID, &d.WebhookID, &d.ProjectID, &d.Event, &d.Success, &d.Attempts, &d.StatusCode, &d.Error,
+		&d.DeployRunID, &d.DeployStatus, &d.DeployConclusion, &d.DeployRunURL, &resolvedAt, &d.CreatedAt); err != nil {
+		return nil, err
+	}
+	if resolvedAt.Valid {
+		d.DeployResolvedAt = &resolvedAt.Time
+	}
+	return &d, nil
+}
+
 // ListWebhookDeliveries returns the most recent deliveries for a project
 // (across all of its webhooks), newest first, capped at limit.
 func (s *SystemDB) ListWebhookDeliveries(ctx context.Context, projectID string, limit int) ([]*WebhookDelivery, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, webhook_id, project_id, event, success, attempts, status_code, error,
-		        deploy_run_id, deploy_status, deploy_conclusion, deploy_run_url, created_at
+		`SELECT `+webhookDeliveryColumns+`
 		 FROM webhook_deliveries WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
 		projectID, limit)
 	if err != nil {
@@ -670,26 +687,95 @@ func (s *SystemDB) ListWebhookDeliveries(ctx context.Context, projectID string, 
 	defer rows.Close()
 	var out []*WebhookDelivery
 	for rows.Next() {
-		var d WebhookDelivery
-		if err := rows.Scan(&d.ID, &d.WebhookID, &d.ProjectID, &d.Event, &d.Success, &d.Attempts, &d.StatusCode, &d.Error,
-			&d.DeployRunID, &d.DeployStatus, &d.DeployConclusion, &d.DeployRunURL, &d.CreatedAt); err != nil {
+		d, err := scanWebhookDelivery(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, &d)
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// LatestGitHubDispatchDelivery returns the most recent successful
+// kind=github_dispatch delivery for a project, or (nil, nil) if there is
+// none -- used by the topbar deploy tile (see PageData.DeployTile) to show
+// the current/most recent deploy's outcome regardless of which webhook or
+// event triggered it.
+func (s *SystemDB) LatestGitHubDispatchDelivery(ctx context.Context, projectID string) (*WebhookDelivery, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+deliveryCols("wd")+`
+		 FROM webhook_deliveries wd JOIN webhooks w ON w.id = wd.webhook_id
+		 WHERE wd.project_id = ? AND w.kind = 'github_dispatch' AND wd.success = 1
+		 ORDER BY wd.created_at DESC, wd.id DESC LIMIT 1`,
+		projectID)
+	d, err := scanWebhookDelivery(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return d, nil
+}
+
+// deliveryCols prefixes webhookDeliveryColumns with a table alias, for
+// queries that JOIN webhook_deliveries against another table.
+func deliveryCols(alias string) string {
+	cols := strings.Split(webhookDeliveryColumns, ", ")
+	for i, c := range cols {
+		cols[i] = alias + "." + strings.TrimSpace(c)
+	}
+	return strings.Join(cols, ", ")
+}
+
+// ListPendingGitHubDispatchDeliveries returns every successful
+// kind=github_dispatch delivery, across all projects, whose deploy state
+// isn't final yet (deploy_status != 'completed'), capped to those created
+// within maxAge -- the background deploy-status poller's work queue (see
+// cmd/tricms/main.go). The age bound stops the poller from retrying a
+// delivery forever if its run can never be found/resolved (a mistyped
+// owner/repo, a workflow that never actually listens for the dispatch,
+// etc.): after maxAge it's left as-is, still visible in the delivery
+// history, just no longer actively polled.
+func (s *SystemDB) ListPendingGitHubDispatchDeliveries(ctx context.Context, maxAge time.Duration) ([]*WebhookDelivery, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deliveryCols("wd")+`
+		 FROM webhook_deliveries wd JOIN webhooks w ON w.id = wd.webhook_id
+		 WHERE w.kind = 'github_dispatch' AND wd.success = 1 AND wd.deploy_status != 'completed'
+		       AND wd.created_at > ?
+		 ORDER BY wd.created_at`,
+		time.Now().Add(-maxAge).UTC().Format("2006-01-02 15:04:05"))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*WebhookDelivery
+	for rows.Next() {
+		d, err := scanWebhookDelivery(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
 	}
 	return out, rows.Err()
 }
 
 // UpdateWebhookDeliveryDeployState persists a github_dispatch delivery's
-// correlated downstream run state, so the next page load/poll doesn't need
-// to re-query GitHub for a delivery that's already resolved (or already
-// being tracked by run id). Called from the Webhooks page's best-effort
-// reconciliation, never from the dispatch path itself -- see
-// pkg/webhooks.Dispatcher.FindDispatchRun/GetRun.
+// correlated downstream run state -- called exclusively by the standalone
+// background deploy-status poller (cmd/tricms/main.go), never from an HTTP
+// request, so a page view never blocks on a GitHub API call. Stamps
+// deploy_resolved_at the moment status first becomes "completed"; the
+// poller stops selecting this delivery afterward (see
+// ListPendingGitHubDispatchDeliveries's deploy_status filter), so this
+// never runs twice for the same delivery in practice, but the CASE keeps
+// it idempotent regardless.
 func (s *SystemDB) UpdateWebhookDeliveryDeployState(ctx context.Context, deliveryID, runID int64, status, conclusion, runURL string) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE webhook_deliveries SET deploy_run_id = ?, deploy_status = ?, deploy_conclusion = ?, deploy_run_url = ? WHERE id = ?`,
-		runID, status, conclusion, runURL, deliveryID)
+		`UPDATE webhook_deliveries
+		 SET deploy_run_id = ?, deploy_status = ?, deploy_conclusion = ?, deploy_run_url = ?,
+		     deploy_resolved_at = CASE WHEN ? = 'completed' THEN CURRENT_TIMESTAMP ELSE deploy_resolved_at END
+		 WHERE id = ?`,
+		runID, status, conclusion, runURL, status, deliveryID)
 	if err != nil {
 		return err
 	}

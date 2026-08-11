@@ -7,146 +7,22 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"tricms/pkg/storage"
 )
 
-// TestHTMX_WebhookDeployStatus_ReconciliationLifecycle exercises the full
-// client-initiated-polling loop for a github_dispatch delivery's downstream
-// build/deploy status: the Webhooks page's periodic HTMX refresh
-// (hx-trigger="every 5s" in webhooks.html) hits htmxWebhooks each time,
-// which best-effort correlates/polls the GitHub Actions API
-// (reconcileGitHubDispatchDeploys) and persists whatever it learns, so a
-// human watching the page sees the state progress in_progress -> success --
-// and, crucially, GitHub stops getting polled once the run is final.
-func TestHTMX_WebhookDeployStatus_ReconciliationLifecycle(t *testing.T) {
+// TestHTMX_WebhookDeployStatus_PageIsReadOnly is the frontend half of the
+// decoupled polling design: the Webhooks page must render whatever the
+// background poller (pollPendingDeploys) has already persisted, and must
+// never itself call the GitHub API -- fetching the page any number of
+// times must not change the delivery's deploy state or hit GitHub at all.
+func TestHTMX_WebhookDeployStatus_PageIsReadOnly(t *testing.T) {
 	e := newHTMXTestEnv(t)
-	admin := e.createUser("deploystatus@x.com", true)
-	p := e.createProject("DeployStatus")
+	admin := e.createUser("pagereadonly@x.com", true)
+	p := e.createProject("PageReadOnly")
 
 	createResp := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
-		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site", GitHubToken: "ghp_secret123",
-		Events: []string{"content.publish"},
-	})
-	if createResp.Code != http.StatusCreated {
-		t.Fatalf("expected 201 creating webhook, got %d: %s", createResp.Code, createResp.Body.String())
-	}
-	wh := decodeBody[storage.Webhook](t, createResp)
-
-	deliveredAt := time.Now().UTC()
-	delivery := &storage.WebhookDelivery{
-		WebhookID: wh.ID, ProjectID: p.ID, Event: "content.publish",
-		Success: true, Attempts: 1, StatusCode: 204,
-	}
-	if err := e.server.System.RecordWebhookDelivery(bgCtx(), delivery); err != nil {
-		t.Fatalf("record delivery: %v", err)
-	}
-
-	// Fake GitHub Actions API: starts by reporting the dispatch-triggered
-	// run as in_progress, later flips to completed/success once told to.
-	var runsListCalls, runCalls int32
-	var runStatus atomic.Value
-	runStatus.Store("in_progress")
-	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/actions/runs") && r.URL.Query().Get("event") == "repository_dispatch":
-			atomic.AddInt32(&runsListCalls, 1)
-			fmt.Fprintf(w, `{"workflow_runs":[{"id":777,"status":"in_progress","conclusion":"","html_url":"https://github.com/louis/mon-site/actions/runs/777","created_at":%q}]}`,
-				deliveredAt.Add(time.Second).Format(time.RFC3339))
-		case strings.HasSuffix(r.URL.Path, "/actions/runs/777"):
-			atomic.AddInt32(&runCalls, 1)
-			status := runStatus.Load().(string)
-			conclusion := ""
-			if status == "completed" {
-				conclusion = "success"
-			}
-			fmt.Fprintf(w, `{"id":777,"status":%q,"conclusion":%q,"html_url":"https://github.com/louis/mon-site/actions/runs/777","created_at":%q}`,
-				status, conclusion, deliveredAt.Add(time.Second).Format(time.RFC3339))
-		default:
-			t.Errorf("unexpected GitHub API call: %s", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer fake.Close()
-	e.server.Dispatcher.GitHubAPIBaseURL = fake.URL
-
-	// First poll: no run id known yet -> FindDispatchRun (the list endpoint).
-	page1 := e.getHTML("/projects/"+p.ID+"/webhooks", admin)
-	if page1.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", page1.Code, page1.Body.String())
-	}
-	if !strings.Contains(page1.Body.String(), "Déploiement en cours") || !strings.Contains(page1.Body.String(), "tri-badge-warning") {
-		t.Fatalf("expected an in-progress deploy badge, got: %s", page1.Body.String())
-	}
-	if atomic.LoadInt32(&runsListCalls) != 1 {
-		t.Fatalf("expected exactly 1 list-runs call to correlate the delivery, got %d", runsListCalls)
-	}
-
-	deliveries, err := e.server.System.ListWebhookDeliveries(bgCtx(), p.ID, 10)
-	if err != nil || len(deliveries) != 1 {
-		t.Fatalf("list deliveries: %v (%d)", err, len(deliveries))
-	}
-	if deliveries[0].DeployRunID != 777 || deliveries[0].DeployStatus != "in_progress" {
-		t.Fatalf("expected correlated in_progress run persisted, got %+v", deliveries[0])
-	}
-	if deliveries[0].DeployFinal() {
-		t.Fatal("in_progress must not be final")
-	}
-
-	// Second poll: a run id is now known -> GetRun (the specific-run
-	// endpoint), not the list endpoint again.
-	page2 := e.getHTML("/projects/"+p.ID+"/webhooks", admin)
-	if !strings.Contains(page2.Body.String(), "Déploiement en cours") {
-		t.Fatalf("expected still in-progress on 2nd poll, got: %s", page2.Body.String())
-	}
-	if atomic.LoadInt32(&runsListCalls) != 1 {
-		t.Fatalf("list-runs must not be called again once a run id is known, got %d calls", runsListCalls)
-	}
-	if atomic.LoadInt32(&runCalls) != 1 {
-		t.Fatalf("expected exactly 1 get-run call on the 2nd poll, got %d", runCalls)
-	}
-
-	// The build finishes.
-	runStatus.Store("completed")
-
-	page3 := e.getHTML("/projects/"+p.ID+"/webhooks", admin)
-	if !strings.Contains(page3.Body.String(), "Déployé") || !strings.Contains(page3.Body.String(), "tri-badge-success") {
-		t.Fatalf("expected a success deploy badge once completed, got: %s", page3.Body.String())
-	}
-	if !strings.Contains(page3.Body.String(), `href="https://github.com/louis/mon-site/actions/runs/777"`) {
-		t.Fatalf("expected the badge to link to the run, got: %s", page3.Body.String())
-	}
-	deliveries, _ = e.server.System.ListWebhookDeliveries(bgCtx(), p.ID, 10)
-	if !deliveries[0].DeployFinal() || deliveries[0].DeployConclusion != "success" {
-		t.Fatalf("expected final success state persisted, got %+v", deliveries[0])
-	}
-	callsAfterCompletion := atomic.LoadInt32(&runCalls)
-
-	// Final state: subsequent polls must NOT hit GitHub again -- this is
-	// the whole point of persisting DeployStatus, not just displaying a
-	// live value.
-	page4 := e.getHTML("/projects/"+p.ID+"/webhooks", admin)
-	if !strings.Contains(page4.Body.String(), "Déployé") {
-		t.Fatalf("expected success badge to persist across polls, got: %s", page4.Body.String())
-	}
-	if atomic.LoadInt32(&runCalls) != callsAfterCompletion {
-		t.Fatalf("expected no further GitHub API calls once deploy state is final, calls went from %d to %d", callsAfterCompletion, runCalls)
-	}
-}
-
-// TestHTMX_WebhookDeployStatus_DegradesWithoutActionsScope covers the
-// migration scenario: an existing github_dispatch webhook's stored PAT
-// only has the original Contents: Read and write scope (no Actions: Read),
-// so the GitHub Actions API 403s. The page must still render normally --
-// the delivery just shows "—" for deploy status -- not a server error.
-func TestHTMX_WebhookDeployStatus_DegradesWithoutActionsScope(t *testing.T) {
-	e := newHTMXTestEnv(t)
-	admin := e.createUser("degrade@x.com", true)
-	p := e.createProject("DegradeCheck")
-
-	createResp := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
-		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site", GitHubToken: "ghp_secret123",
+		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site", GitHubToken: "ghp_secret",
 		Events: []string{"content.publish"},
 	})
 	wh := decodeBody[storage.Webhook](t, createResp)
@@ -156,18 +32,99 @@ func TestHTMX_WebhookDeployStatus_DegradesWithoutActionsScope(t *testing.T) {
 		t.Fatalf("record delivery: %v", err)
 	}
 
-	forbidden := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, `{"message":"Resource not accessible by personal access token"}`)
+	var githubCalls int32
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&githubCalls, 1)
+		fmt.Fprint(w, `{"workflow_runs":[]}`)
 	}))
-	defer forbidden.Close()
-	e.server.Dispatcher.GitHubAPIBaseURL = forbidden.URL
+	defer fake.Close()
+	e.server.Dispatcher.GitHubAPIBaseURL = fake.URL
 
+	// Before the poller has ever run: nothing correlated, page shows "—".
 	rec := e.getHTML("/projects/"+p.ID+"/webhooks", admin)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 even when the GitHub Actions API is unreachable/forbidden, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `<span class="tri-badge-outline">—</span>`) {
-		t.Fatalf("expected the unresolved deploy status placeholder, got: %s", rec.Body.String())
+		t.Fatalf("expected the unresolved placeholder before any poll, got: %s", rec.Body.String())
+	}
+
+	// Fetching the page repeatedly must never call GitHub -- only the
+	// background poller does that.
+	for i := 0; i < 3; i++ {
+		e.getHTML("/projects/"+p.ID+"/webhooks", admin)
+	}
+	if atomic.LoadInt32(&githubCalls) != 0 {
+		t.Fatalf("expected the Webhooks page to never call the GitHub API itself, got %d calls", githubCalls)
+	}
+
+	// Now run the background poller explicitly (simulating its own
+	// independent tick) and confirm the page picks up what it wrote,
+	// purely by reading the database.
+	e.server.pollPendingDeploys(bgCtx())
+	if atomic.LoadInt32(&githubCalls) == 0 {
+		t.Fatal("expected the poller itself to have called GitHub")
+	}
+	callsAfterPoll := atomic.LoadInt32(&githubCalls)
+
+	deliveries, _ := e.server.System.ListWebhookDeliveries(bgCtx(), p.ID, 10)
+	if deliveries[0].DeployStatus != "" {
+		// The fake server returned an empty workflow_runs list, so
+		// correlation legitimately found nothing yet -- still "—" is fine,
+		// the important assertion is that the page didn't drive this call.
+		t.Logf("delivery deploy status after poll: %+v", deliveries[0])
+	}
+
+	rec = e.getHTML("/projects/"+p.ID+"/webhooks", admin)
+	if atomic.LoadInt32(&githubCalls) != callsAfterPoll {
+		t.Fatalf("expected the page GET to add zero GitHub calls, went from %d to %d", callsAfterPoll, githubCalls)
+	}
+}
+
+// TestHTMX_WebhookDeployStatus_RendersPersistedState confirms the actual
+// badge rendering (text/class/link) once the poller has written a
+// completed, successful deploy -- reading real html/template output, not
+// just the storage layer.
+func TestHTMX_WebhookDeployStatus_RendersPersistedState(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	admin := e.createUser("renderstate@x.com", true)
+	p := e.createProject("RenderState")
+
+	createResp := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site", GitHubToken: "ghp_secret",
+		Events: []string{"content.publish"},
+	})
+	wh := decodeBody[storage.Webhook](t, createResp)
+	if err := e.server.System.RecordWebhookDelivery(bgCtx(), &storage.WebhookDelivery{
+		WebhookID: wh.ID, ProjectID: p.ID, Event: "content.publish", Success: true, Attempts: 1, StatusCode: 204,
+	}); err != nil {
+		t.Fatalf("record delivery: %v", err)
+	}
+	deliveries, _ := e.server.System.ListWebhookDeliveries(bgCtx(), p.ID, 10)
+
+	// Simulate what the poller would have written, directly via storage --
+	// this test is about template rendering, not the poller itself (see
+	// deploy_poller_test.go for that).
+	if err := e.server.System.UpdateWebhookDeliveryDeployState(bgCtx(), deliveries[0].ID, 42, "completed", "success", "https://github.com/louis/mon-site/actions/runs/42"); err != nil {
+		t.Fatalf("update deploy state: %v", err)
+	}
+
+	rec := e.getHTML("/projects/"+p.ID+"/webhooks", admin)
+	body := rec.Body.String()
+	if !strings.Contains(body, "Déployé") || !strings.Contains(body, "tri-badge-success") {
+		t.Fatalf("expected a success deploy badge, got: %s", body)
+	}
+	if !strings.Contains(body, `href="https://github.com/louis/mon-site/actions/runs/42"`) {
+		t.Fatalf("expected the badge to link to the run, got: %s", body)
+	}
+
+	// And a failure conclusion renders the danger variant.
+	if err := e.server.System.UpdateWebhookDeliveryDeployState(bgCtx(), deliveries[0].ID, 43, "completed", "failure", "https://github.com/louis/mon-site/actions/runs/43"); err != nil {
+		t.Fatalf("update deploy state: %v", err)
+	}
+	rec = e.getHTML("/projects/"+p.ID+"/webhooks", admin)
+	body = rec.Body.String()
+	if !strings.Contains(body, "Échec du déploiement") || !strings.Contains(body, "tri-badge-danger") {
+		t.Fatalf("expected a failure deploy badge, got: %s", body)
 	}
 }

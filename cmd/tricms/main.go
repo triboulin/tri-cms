@@ -97,6 +97,13 @@ func main() {
 
 	router := api.NewRouter(server)
 
+	// Background deploy-status poller: independent of any HTTP request, so
+	// a slow/unreachable GitHub API can never stall a page load (see
+	// pkg/api/deploy_poller.go). No graceful-shutdown plumbing exists
+	// elsewhere in this binary either, so this just runs for the process's
+	// lifetime like everything else here.
+	go server.RunDeployStatusPoller(context.Background())
+
 	log.Printf("triCMS listening on %s (data dir: %s)", addr, dataDir)
 	if err := http.ListenAndServe(addr, router); err != nil {
 		log.Fatalf("server error: %v", err)

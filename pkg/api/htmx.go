@@ -35,6 +35,7 @@ func mountHTMXRoutes(r chi.Router, s *Server) {
 
 	r.Get("/projects/{projectID}/conception", s.htmxConception)
 	r.Get("/projects/{projectID}/icon", s.htmxProjectIcon)
+	r.Get("/projects/{projectID}/deploy-tile", s.htmxDeployTile)
 	r.Post("/projects/{projectID}/icon", s.htmxUploadProjectIcon)
 	r.Post("/projects/{projectID}/icon/delete", s.htmxDeleteProjectIcon)
 	r.Post("/projects/{projectID}/schemas/create", s.htmxCreateSchema)

@@ -105,19 +105,24 @@ type WebhookDelivery struct {
 	Error      string    `json:"error"`
 	CreatedAt  time.Time `json:"created_at"`
 
-	// DeployRunID/DeployStatus/DeployConclusion/DeployRunURL track the
-	// downstream GitHub Actions run a kind=github_dispatch delivery most
-	// likely triggered (see pkg/webhooks.Dispatcher.FindDispatchRun/GetRun).
-	// Success above only means "GitHub accepted the dispatch call" -- these
-	// fields are the actual build/deploy outcome, populated by best-effort
-	// polling from the Webhooks page while DeployStatus is still non-final
-	// (empty, "queued", or "in_progress"); left empty for generic webhooks,
-	// failed dispatches, or a github_dispatch run that hasn't been
-	// correlated yet.
-	DeployRunID      int64  `json:"deploy_run_id,omitempty"`
-	DeployStatus     string `json:"deploy_status,omitempty"`     // "" | "queued" | "in_progress" | "completed"
-	DeployConclusion string `json:"deploy_conclusion,omitempty"` // "" until completed, then "success" | "failure" | "cancelled" | ...
-	DeployRunURL     string `json:"deploy_run_url,omitempty"`
+	// DeployRunID/DeployStatus/DeployConclusion/DeployRunURL/DeployResolvedAt
+	// track the downstream GitHub Actions run a kind=github_dispatch
+	// delivery most likely triggered (see
+	// pkg/webhooks.Dispatcher.FindDispatchRun/GetRun). Success above only
+	// means "GitHub accepted the dispatch call" -- these fields are the
+	// actual build/deploy outcome. Written by a standalone background
+	// poller (pkg/api's deploy status poller, started from
+	// cmd/tricms/main.go), not by any page view -- the DB is the only
+	// hand-off between that poller and whatever's reading these fields
+	// (the Webhooks page's history table, and the topbar deploy tile on
+	// every project page), so both stay decoupled and keep working whether
+	// or not the other is ever looked at. Left empty for generic webhooks,
+	// failed dispatches, or a github_dispatch run not correlated yet.
+	DeployRunID      int64      `json:"deploy_run_id,omitempty"`
+	DeployStatus     string     `json:"deploy_status,omitempty"`     // "" | "queued" | "in_progress" | "completed"
+	DeployConclusion string     `json:"deploy_conclusion,omitempty"` // "" until completed, then "success" | "failure" | "cancelled" | ...
+	DeployRunURL     string     `json:"deploy_run_url,omitempty"`
+	DeployResolvedAt *time.Time `json:"deploy_resolved_at,omitempty"` // set once, the moment DeployStatus first becomes "completed"
 }
 
 // DeployFinal reports whether DeployStatus has reached a terminal state (no
@@ -126,6 +131,15 @@ type WebhookDelivery struct {
 // afterward.
 func (d *WebhookDelivery) DeployFinal() bool {
 	return d.DeployStatus == "completed"
+}
+
+// DeployRecentlyResolved reports whether this delivery reached a final
+// deploy state within the last `within` duration -- used by the topbar
+// deploy tile to keep showing a completed build's outcome for a short
+// grace period after it resolves, instead of vanishing the instant it's
+// done.
+func (d *WebhookDelivery) DeployRecentlyResolved(within time.Duration) bool {
+	return d.DeployFinal() && d.DeployResolvedAt != nil && time.Since(*d.DeployResolvedAt) <= within
 }
 
 type GlobalLog struct {

@@ -12,6 +12,14 @@
 </head>
 {{end}}
 
+{{define "partial:deploy_tile"}}
+<div class="tri-deploy-tile {{.Class}}">
+  <span class="material-icons" aria-hidden="true">{{.Icon}}</span>
+  <span>{{.Label}}</span>
+  {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener">Voir le run <span class="material-icons" aria-hidden="true" style="font-size:16px;">open_in_new</span></a>{{end}}
+</div>
+{{end}}
+
 {{define "partial:media_picker_item"}}
 <button type="button" class="tri-media-picker-item {{if .Selected}}selected{{end}}" data-value="{{.Value}}" data-label="{{.Label}}" data-preview="{{.PreviewURL}}" data-is-image="{{.IsImage}}" data-is-video="{{.IsVideo}}">
   <span class="tri-media-picker-item-preview">
@@ -127,6 +135,15 @@
     <a class="tri-icon-btn{{if not .IsHome}} tri-logout-hide-mobile{{end}}" title="Déconnexion" href="/logout" aria-label="Déconnexion"><span class="material-icons" aria-hidden="true">logout</span></a>
   </div>
 </div>
+{{if .CurrentProject}}
+{{/* Site-wide deploy-status feedback: present on every page of a project
+     (not just Webhooks), so publishing content and then navigating away
+     doesn't lose track of whether the resulting rebuild succeeded. Purely
+     a client-side poll of already-persisted state (htmxDeployTile reads
+     the DB only) -- see deploy_poller.go for the independent Go-side
+     poller that actually talks to GitHub and writes what this reads. */}}
+<div id="deploy-tile" hx-get="/projects/{{.CurrentProject.ID}}/deploy-tile" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
+{{end}}
 {{end}}
 
 {{define "page:error"}}

@@ -368,9 +368,113 @@ func TestSystemDB_WebhookDelivery_DeployState(t *testing.T) {
 	if !got.DeployFinal() {
 		t.Fatal("completed must be considered final")
 	}
+	if got.DeployResolvedAt == nil {
+		t.Fatal("expected deploy_resolved_at to be stamped on first transition to completed")
+	}
+	if !got.DeployRecentlyResolved(time.Minute) {
+		t.Fatal("expected a just-resolved delivery to be within a 1-minute grace window")
+	}
+	if got.DeployRecentlyResolved(0) {
+		t.Fatal("a zero-duration grace window must never match")
+	}
 
 	if err := db.UpdateWebhookDeliveryDeployState(ctx, 999999, 1, "queued", "", ""); err == nil {
 		t.Fatal("expected error updating a non-existent delivery id")
+	}
+}
+
+func TestSystemDB_LatestGitHubDispatchDelivery(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	proj := &Project{ID: "proj_latest", Name: "Latest", FolderPath: "./data/projects/proj_latest"}
+	if err := db.CreateProject(ctx, proj); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := db.LatestGitHubDispatchDelivery(ctx, proj.ID); err != nil || got != nil {
+		t.Fatalf("expected (nil, nil) with no deliveries yet: %v, %+v", err, got)
+	}
+
+	generic := &Webhook{ID: "wh-generic", ProjectID: proj.ID, Kind: "generic", URL: "https://x", Secret: "s", Events: []string{"content.publish"}}
+	if err := db.CreateWebhook(ctx, generic); err != nil {
+		t.Fatal(err)
+	}
+	dispatch := &Webhook{ID: "wh-dispatch", ProjectID: proj.ID, Kind: "github_dispatch", Config: `{"owner":"o","repo":"r","token":"t"}`, Events: []string{"content.publish"}}
+	if err := db.CreateWebhook(ctx, dispatch); err != nil {
+		t.Fatal(err)
+	}
+
+	// A generic delivery must never surface here, even though it's more
+	// "recent" by insertion order than nothing at all.
+	if err := db.RecordWebhookDelivery(ctx, &WebhookDelivery{WebhookID: generic.ID, ProjectID: proj.ID, Event: "content.publish", Success: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := db.LatestGitHubDispatchDelivery(ctx, proj.ID); err != nil || got != nil {
+		t.Fatalf("a generic delivery must not match: %v, %+v", err, got)
+	}
+
+	// A failed dispatch call (GitHub rejected it) shouldn't surface either
+	// -- nothing downstream was ever triggered to track.
+	if err := db.RecordWebhookDelivery(ctx, &WebhookDelivery{WebhookID: dispatch.ID, ProjectID: proj.ID, Event: "content.publish", Success: false, Error: "unexpected status code 401"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := db.LatestGitHubDispatchDelivery(ctx, proj.ID); err != nil || got != nil {
+		t.Fatalf("a failed dispatch must not match: %v, %+v", err, got)
+	}
+
+	if err := db.RecordWebhookDelivery(ctx, &WebhookDelivery{WebhookID: dispatch.ID, ProjectID: proj.ID, Event: "content.publish", Success: true, StatusCode: 204}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.LatestGitHubDispatchDelivery(ctx, proj.ID)
+	if err != nil || got == nil {
+		t.Fatalf("expected the successful dispatch delivery: %v, %+v", err, got)
+	}
+	if got.WebhookID != dispatch.ID {
+		t.Fatalf("expected the github_dispatch delivery, got webhook %q", got.WebhookID)
+	}
+}
+
+func TestSystemDB_ListPendingGitHubDispatchDeliveries(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	proj := &Project{ID: "proj_pending", Name: "Pending", FolderPath: "./data/projects/proj_pending"}
+	if err := db.CreateProject(ctx, proj); err != nil {
+		t.Fatal(err)
+	}
+	dispatch := &Webhook{ID: "wh-pending", ProjectID: proj.ID, Kind: "github_dispatch", Config: `{"owner":"o","repo":"r","token":"t"}`, Events: []string{"content.publish"}}
+	if err := db.CreateWebhook(ctx, dispatch); err != nil {
+		t.Fatal(err)
+	}
+	generic := &Webhook{ID: "wh-pending-generic", ProjectID: proj.ID, Kind: "generic", URL: "https://x", Secret: "s", Events: []string{"content.publish"}}
+	if err := db.CreateWebhook(ctx, generic); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.RecordWebhookDelivery(ctx, &WebhookDelivery{WebhookID: dispatch.ID, ProjectID: proj.ID, Event: "content.publish", Success: true}); err != nil {
+		t.Fatal(err) // pending: never correlated yet (deploy_status == "")
+	}
+	if err := db.RecordWebhookDelivery(ctx, &WebhookDelivery{WebhookID: generic.ID, ProjectID: proj.ID, Event: "content.publish", Success: true}); err != nil {
+		t.Fatal(err) // must never appear: not a github_dispatch webhook
+	}
+	if err := db.RecordWebhookDelivery(ctx, &WebhookDelivery{WebhookID: dispatch.ID, ProjectID: proj.ID, Event: "content.publish", Success: false}); err != nil {
+		t.Fatal(err) // must never appear: the dispatch call itself failed
+	}
+
+	pending, err := db.ListPendingGitHubDispatchDeliveries(ctx, time.Hour)
+	if err != nil {
+		t.Fatalf("list pending: %v", err)
+	}
+	if len(pending) != 1 || pending[0].WebhookID != dispatch.ID {
+		t.Fatalf("expected exactly the one uncorrelated github_dispatch delivery, got %+v", pending)
+	}
+
+	// Once resolved, it must drop out of the pending set.
+	if err := db.UpdateWebhookDeliveryDeployState(ctx, pending[0].ID, 1, "completed", "success", "https://x/1"); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	pending, err = db.ListPendingGitHubDispatchDeliveries(ctx, time.Hour)
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("expected an empty pending set once resolved: %v (%d)", err, len(pending))
 	}
 }
 
