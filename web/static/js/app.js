@@ -10,6 +10,8 @@
 //    flow.
 //  - a generic "disable + spinner" state on form submit buttons.
 //  - a small reusable client-side table filter (opt-in via data attributes).
+//  - collapsible "create" panels: a button on a section title toggles a
+//    hidden form instead of that form permanently occupying its own row.
 
 (function () {
   'use strict';
@@ -247,4 +249,34 @@
       if (empty) empty.style.display = visible === 0 ? '' : 'none';
     });
   });
+
+  // ---- Collapsible "create" panels ---------------------------------------
+  // A "Nouveau X"/"Ajouter" button at the end of a section title
+  // (data-toggle-target="panel-id") shows/hides the matching panel, which
+  // starts `hidden` in the markup -- instead of that create form always
+  // taking up a full row of its own above/below the list it adds to.
+  // A link to #panel-id from elsewhere (e.g. Collections' "Nouveau schéma"
+  // jumping into Conception) still works: the panel opens itself on load
+  // when the URL hash names it, same as it would have been visible before.
+
+  document.querySelectorAll('[data-toggle-target]').forEach(function (btn) {
+    var target = document.getElementById(btn.getAttribute('data-toggle-target'));
+    if (!target) return;
+    btn.addEventListener('click', function () {
+      target.hidden = !target.hidden;
+      if (!target.hidden) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        var firstField = target.querySelector('input, select, textarea');
+        if (firstField) firstField.focus();
+      }
+    });
+  });
+
+  if (location.hash) {
+    var hashTarget = document.getElementById(location.hash.slice(1));
+    if (hashTarget && hashTarget.hidden) {
+      hashTarget.hidden = false;
+      hashTarget.scrollIntoView({ block: 'start' });
+    }
+  }
 })();

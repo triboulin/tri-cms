@@ -57,7 +57,7 @@
               </div>
             {{else if eq .Kind "media-select"}}
               {{$key := .Key}}
-              <div class="tri-media-picker" data-key="{{$key}}" data-multi="false">
+              <div class="tri-media-picker" data-key="{{$key}}" data-multi="false" data-upload-url="/projects/{{$.CurrentProject.ID}}/medias/upload-for-picker">
                 <input type="hidden" name="{{$key}}" class="tri-media-picker-value" value="{{.ValueStr}}">
                 <div class="tri-media-picker-preview">
                   {{range .SelectOptions}}{{if .Selected}}
@@ -77,21 +77,15 @@
                   <div class="tri-media-picker-modal-inner">
                     <div class="tri-media-picker-modal-header">
                       <input type="text" class="tri-media-picker-filter" placeholder="Filtrer les médias…">
+                      <button type="button" class="tri-btn tri-btn-sm tri-media-picker-upload-btn"><span class="material-icons" aria-hidden="true">upload</span> Téléverser</button>
+                      <input type="file" class="tri-media-picker-upload-input" hidden>
                       <button type="button" class="tri-icon-btn tri-media-picker-close" aria-label="Fermer"><span class="material-icons" aria-hidden="true">close</span></button>
                     </div>
+                    <p class="tri-media-picker-upload-error" hidden></p>
                     <div class="tri-media-picker-grid">
-                      {{range .SelectOptions}}
-                      <button type="button" class="tri-media-picker-item {{if .Selected}}selected{{end}}" data-value="{{.Value}}" data-label="{{.Label}}" data-preview="{{.PreviewURL}}" data-is-image="{{.IsImage}}" data-is-video="{{.IsVideo}}">
-                        <span class="tri-media-picker-item-preview">
-                          {{if .IsImage}}<img src="{{.PreviewURL}}" alt="{{.Label}}" loading="lazy">
-                          {{else if .IsVideo}}<video src="{{.PreviewURL}}" preload="metadata" muted></video>
-                          {{else}}<span class="material-icons" aria-hidden="true">insert_drive_file</span>{{end}}
-                        </span>
-                        <span class="tri-media-picker-item-label">{{.Label}}</span>
-                      </button>
-                      {{end}}
+                      {{range .SelectOptions}}{{template "partial:media_picker_item" .}}{{end}}
                     </div>
-                    {{if not .SelectOptions}}<p class="tri-empty">Aucun média dans ce projet. Téléversez-en depuis la page Médias.</p>{{end}}
+                    {{if not .SelectOptions}}<p class="tri-empty tri-media-picker-empty">Aucun média dans ce projet. Téléversez-en un ci-dessus.</p>{{end}}
                   </div>
                 </div>
               </div>
@@ -102,7 +96,7 @@
               </select>
             {{else if eq .Kind "media-multiselect"}}
               {{$key := .Key}}
-              <div class="tri-media-picker" data-key="{{$key}}" data-multi="true">
+              <div class="tri-media-picker" data-key="{{$key}}" data-multi="true" data-upload-url="/projects/{{$.CurrentProject.ID}}/medias/upload-for-picker">
                 <div class="tri-media-picker-preview">
                   {{range .SelectOptions}}{{if .Selected}}
                   <div class="tri-media-picker-chip" data-value="{{.Value}}">
@@ -122,21 +116,15 @@
                   <div class="tri-media-picker-modal-inner">
                     <div class="tri-media-picker-modal-header">
                       <input type="text" class="tri-media-picker-filter" placeholder="Filtrer les médias…">
+                      <button type="button" class="tri-btn tri-btn-sm tri-media-picker-upload-btn"><span class="material-icons" aria-hidden="true">upload</span> Téléverser</button>
+                      <input type="file" class="tri-media-picker-upload-input" hidden>
                       <button type="button" class="tri-icon-btn tri-media-picker-close" aria-label="Fermer"><span class="material-icons" aria-hidden="true">close</span></button>
                     </div>
+                    <p class="tri-media-picker-upload-error" hidden></p>
                     <div class="tri-media-picker-grid">
-                      {{range .SelectOptions}}
-                      <button type="button" class="tri-media-picker-item {{if .Selected}}selected{{end}}" data-value="{{.Value}}" data-label="{{.Label}}" data-preview="{{.PreviewURL}}" data-is-image="{{.IsImage}}" data-is-video="{{.IsVideo}}">
-                        <span class="tri-media-picker-item-preview">
-                          {{if .IsImage}}<img src="{{.PreviewURL}}" alt="{{.Label}}" loading="lazy">
-                          {{else if .IsVideo}}<video src="{{.PreviewURL}}" preload="metadata" muted></video>
-                          {{else}}<span class="material-icons" aria-hidden="true">insert_drive_file</span>{{end}}
-                        </span>
-                        <span class="tri-media-picker-item-label">{{.Label}}</span>
-                      </button>
-                      {{end}}
+                      {{range .SelectOptions}}{{template "partial:media_picker_item" .}}{{end}}
                     </div>
-                    {{if not .SelectOptions}}<p class="tri-empty">Aucun média dans ce projet. Téléversez-en depuis la page Médias.</p>{{end}}
+                    {{if not .SelectOptions}}<p class="tri-empty tri-media-picker-empty">Aucun média dans ce projet. Téléversez-en un ci-dessus.</p>{{end}}
                   </div>
                 </div>
               </div>

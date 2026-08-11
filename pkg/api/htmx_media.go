@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -132,22 +133,21 @@ func (s *Server) htmxMediaFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
-func (s *Server) htmxUploadMedia(w http.ResponseWriter, r *http.Request) {
-	user, project := s.loadProjectForHTMX(w, r, auth.SectionMedias)
-	if user == nil {
-		return
-	}
-	back := "/projects/" + project.ID + "/medias"
-
+// saveUploadedMedia parses the "file" field of a multipart POST, writes it
+// to the project's media directory, and inserts the storage.Media row.
+// Shared by htmxUploadMedia (redirect-based, the standalone Médias page)
+// and htmxUploadMediaForPicker (fragment response, so the media picker
+// modal can add a file without navigating away from whatever form it's
+// embedded in). deploying reports whether that upload also triggered a
+// webhook delivery, for callers that surface it in a flash message.
+func (s *Server) saveUploadedMedia(w http.ResponseWriter, r *http.Request, project *storage.Project) (m *storage.Media, deploying bool, err error) {
 	r.Body = http.MaxBytesReader(w, r.Body, s.MaxUploadSize)
 	if err := r.ParseMultipartForm(multipartMemoryThreshold); err != nil {
-		redirectWithFlash(w, r, back, "Fichier trop volumineux ou envoi invalide.", "error")
-		return
+		return nil, false, fmt.Errorf("Fichier trop volumineux ou envoi invalide.")
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		redirectWithFlash(w, r, back, "Sélectionnez un fichier à téléverser.", "error")
-		return
+		return nil, false, fmt.Errorf("Sélectionnez un fichier à téléverser.")
 	}
 	defer file.Close()
 
@@ -157,15 +157,13 @@ func (s *Server) htmxUploadMedia(w http.ResponseWriter, r *http.Request) {
 
 	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
 	if err != nil {
-		redirectWithFlash(w, r, back, "Impossible d'enregistrer le fichier.", "error")
-		return
+		return nil, false, fmt.Errorf("Impossible d'enregistrer le fichier.")
 	}
 	written, err := io.Copy(out, file)
 	closeErr := out.Close()
 	if err != nil || closeErr != nil {
 		os.Remove(destPath)
-		redirectWithFlash(w, r, back, "Impossible d'enregistrer le fichier.", "error")
-		return
+		return nil, false, fmt.Errorf("Impossible d'enregistrer le fichier.")
 	}
 
 	mimeType := header.Header.Get("Content-Type")
@@ -176,17 +174,60 @@ func (s *Server) htmxUploadMedia(w http.ResponseWriter, r *http.Request) {
 	db, err := s.projectDB(project.ID)
 	if err != nil {
 		os.Remove(destPath)
-		redirectWithFlash(w, r, back, "Erreur serveur.", "error")
-		return
+		return nil, false, fmt.Errorf("Erreur serveur.")
 	}
-	m := &storage.Media{ID: id, Filename: header.Filename, MimeType: mimeType, Size: written, FilePath: storedName}
+	m = &storage.Media{ID: id, Filename: header.Filename, MimeType: mimeType, Size: written, FilePath: storedName}
 	if err := db.CreateMedia(r.Context(), m); err != nil {
 		os.Remove(destPath)
-		redirectWithFlash(w, r, back, "Impossible d'enregistrer le média : "+err.Error(), "error")
+		return nil, false, fmt.Errorf("Impossible d'enregistrer le média : %w", err)
+	}
+	deploying = s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaCreate, map[string]string{"id": m.ID, "filename": m.Filename})
+	return m, deploying, nil
+}
+
+func (s *Server) htmxUploadMedia(w http.ResponseWriter, r *http.Request) {
+	user, project := s.loadProjectForHTMX(w, r, auth.SectionMedias)
+	if user == nil {
 		return
 	}
-	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaCreate, map[string]string{"id": m.ID, "filename": m.Filename})
-	redirectWithFlash(w, r, back, saveFlashMessage("Média « "+header.Filename+" » téléversé.", deploying), "success")
+	back := "/projects/" + project.ID + "/medias"
+
+	m, deploying, err := s.saveUploadedMedia(w, r, project)
+	if err != nil {
+		redirectWithFlash(w, r, back, err.Error(), "error")
+		return
+	}
+	redirectWithFlash(w, r, back, saveFlashMessage("Média « "+m.Filename+" » téléversé.", deploying), "success")
+}
+
+// htmxUploadMediaForPicker uploads a file the same way htmxUploadMedia does,
+// but responds with the new item's picker-grid markup (partial:media_picker_item)
+// instead of redirecting -- media-picker.js POSTs here via fetch() and
+// inserts the response directly into the open modal's grid, so uploading a
+// file doesn't discard whatever else the user was filling in on the
+// surrounding content form.
+func (s *Server) htmxUploadMediaForPicker(w http.ResponseWriter, r *http.Request) {
+	user, project := s.loadProjectForHTMX(w, r, auth.SectionMedias)
+	if user == nil {
+		return
+	}
+	m, _, err := s.saveUploadedMedia(w, r, project)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	opt := SelectOption{
+		Value:      m.ID,
+		Label:      m.Filename,
+		PreviewURL: "/projects/" + project.ID + "/medias/" + m.ID + "/file",
+		IsImage:    strings.HasPrefix(m.MimeType, "image/"),
+		IsVideo:    strings.HasPrefix(m.MimeType, "video/"),
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.Templates.ExecuteTemplate(w, "partial:media_picker_item", opt); err != nil {
+		log.Printf("template render error (partial:media_picker_item): %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) htmxDeleteMedia(w http.ResponseWriter, r *http.Request) {

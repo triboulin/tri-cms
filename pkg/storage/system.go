@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     folder_path TEXT NOT NULL,
+    icon_path TEXT NOT NULL DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -108,6 +109,10 @@ func OpenSystemDB(dsn string) (*SystemDB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate system db: %w", err)
 	}
+	if err := migrateProjectColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate system db: %w", err)
+	}
 	return &SystemDB{db: db}, nil
 }
 
@@ -140,6 +145,16 @@ func migrateWebhookColumns(db *sql.DB) error {
 			}
 			return err
 		}
+	}
+	return nil
+}
+
+// migrateProjectColumns adds icon_path to pre-existing projects tables, the
+// same pattern as migrateWebhookColumns/migrateUserColumns above.
+func migrateProjectColumns(db *sql.DB) error {
+	_, err := db.Exec(`ALTER TABLE projects ADD COLUMN icon_path TEXT NOT NULL DEFAULT ''`)
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+		return err
 	}
 	return nil
 }
@@ -271,9 +286,9 @@ func (s *SystemDB) CreateProject(ctx context.Context, p *Project) error {
 
 func (s *SystemDB) GetProject(ctx context.Context, id string) (*Project, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, folder_path, created_at FROM projects WHERE id = ?`, id)
+		`SELECT id, name, folder_path, icon_path, created_at FROM projects WHERE id = ?`, id)
 	var p Project
-	if err := row.Scan(&p.ID, &p.Name, &p.FolderPath, &p.CreatedAt); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.FolderPath, &p.IconPath, &p.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -284,7 +299,7 @@ func (s *SystemDB) GetProject(ctx context.Context, id string) (*Project, error) 
 
 func (s *SystemDB) ListProjects(ctx context.Context) ([]*Project, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, folder_path, created_at FROM projects ORDER BY created_at`)
+		`SELECT id, name, folder_path, icon_path, created_at FROM projects ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +307,7 @@ func (s *SystemDB) ListProjects(ctx context.Context) ([]*Project, error) {
 	var out []*Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.FolderPath, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.FolderPath, &p.IconPath, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, &p)
@@ -307,7 +322,7 @@ func (s *SystemDB) ListProjectsForUser(ctx context.Context, userID string, isGlo
 		return s.ListProjects(ctx)
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT p.id, p.name, p.folder_path, p.created_at
+		SELECT p.id, p.name, p.folder_path, p.icon_path, p.created_at
 		FROM projects p
 		JOIN project_permissions pp ON pp.project_id = p.id
 		WHERE pp.user_id = ?
@@ -319,12 +334,69 @@ func (s *SystemDB) ListProjectsForUser(ctx context.Context, userID string, isGlo
 	var out []*Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.FolderPath, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.FolderPath, &p.IconPath, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, &p)
 	}
 	return out, rows.Err()
+}
+
+// SetProjectIcon updates a project's icon filename (empty string clears it,
+// reverting the breadcrumb/dashboard card to the default triCMS logo).
+func (s *SystemDB) SetProjectIcon(ctx context.Context, projectID, iconPath string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE projects SET icon_path = ? WHERE id = ?`, iconPath, projectID)
+	if err != nil {
+		return err
+	}
+	return checkRowsAffected(res)
+}
+
+// ProjectLastActivity reports the most recent logged action for a project
+// (content/schema/media changes -- see LogAction call sites), falling back
+// to the project's creation time for one with no activity yet. Used by the
+// dashboard's project cards to show "last modified" without a dedicated
+// updated_at column that every write path would need to remember to bump.
+func (s *SystemDB) ProjectLastActivity(ctx context.Context, projectID string, createdAt time.Time) (time.Time, error) {
+	// A plain "SELECT created_at" scans straight into time.Time elsewhere in
+	// this file because the driver maps that column's declared DATETIME
+	// affinity automatically -- but MAX(created_at) is a computed result
+	// column with no declared type of its own, so it comes back as a raw
+	// string/[]byte instead and a sql.NullTime.Scan fails outright. Accept
+	// whatever shape comes back and parse it ourselves.
+	var raw any
+	err := s.db.QueryRowContext(ctx,
+		`SELECT MAX(created_at) FROM global_logs WHERE project_id = ?`, projectID).Scan(&raw)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if last, ok := parseSQLiteDatetime(raw); ok && last.After(createdAt) {
+		return last, nil
+	}
+	return createdAt, nil
+}
+
+// parseSQLiteDatetime parses the raw driver value of a SQLite
+// CURRENT_TIMESTAMP-formatted column ("2006-01-02 15:04:05", no timezone)
+// coming back untyped, e.g. from an aggregate. ok is false for NULL or any
+// unparseable value.
+func parseSQLiteDatetime(raw any) (t time.Time, ok bool) {
+	var s string
+	switch v := raw.(type) {
+	case time.Time:
+		return v, true
+	case string:
+		s = v
+	case []byte:
+		s = string(v)
+	default:
+		return time.Time{}, false
+	}
+	t, err := time.Parse("2006-01-02 15:04:05", s)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 func (s *SystemDB) DeleteProject(ctx context.Context, id string) error {

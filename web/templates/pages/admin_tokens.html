@@ -16,7 +16,7 @@
         </div>
       {{end}}
 
-      <div class="tri-card">
+      <div class="tri-card" id="create" hidden>
         <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau token API</h3>
         <p class="tri-empty">Chaque token est global et équivaut à un compte ADMIN complet (tous les projets, toutes les actions -- sauf la suppression d'un projet, qui n'a pas de route API). Donnez-lui un nom explicite par usage (ex: le nom du site qui l'utilisera) pour pouvoir le révoquer individuellement plus tard.</p>
         <form class="tri-form" method="post" action="/admin/tokens/create">
@@ -26,7 +26,10 @@
         </form>
       </div>
 
-      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">vpn_key</span> Tokens API</h2></div>
+      <div class="tri-section-title">
+        <h2><span class="material-icons" aria-hidden="true">vpn_key</span> Tokens API</h2>
+        <button type="button" class="tri-btn tri-btn-sm" data-toggle-target="create"><span class="material-icons" aria-hidden="true">add</span> Nouveau token</button>
+      </div>
       {{if not .Content.Tokens}}
         <p class="tri-empty">Aucun token pour le moment.</p>
       {{else}}

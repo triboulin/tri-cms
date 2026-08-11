@@ -11,6 +11,17 @@
 </head>
 {{end}}
 
+{{define "partial:media_picker_item"}}
+<button type="button" class="tri-media-picker-item {{if .Selected}}selected{{end}}" data-value="{{.Value}}" data-label="{{.Label}}" data-preview="{{.PreviewURL}}" data-is-image="{{.IsImage}}" data-is-video="{{.IsVideo}}">
+  <span class="tri-media-picker-item-preview">
+    {{if .IsImage}}<img src="{{.PreviewURL}}" alt="{{.Label}}" loading="lazy">
+    {{else if .IsVideo}}<video src="{{.PreviewURL}}" preload="metadata" muted></video>
+    {{else}}<span class="material-icons" aria-hidden="true">insert_drive_file</span>{{end}}
+  </span>
+  <span class="tri-media-picker-item-label">{{.Label}}</span>
+</button>
+{{end}}
+
 {{define "partial:flash"}}
 {{if .Flash}}
 <div class="tri-flash tri-flash-{{.FlashKind}}">
@@ -33,7 +44,13 @@
 */}}
 {{define "partial:breadcrumb"}}
 <div class="tri-breadcrumb">
-  <a href="/"><img src="/static/img/logo.svg" alt="triCMS" class="tri-logo"></a>
+  <a href="/">
+    {{if and .CurrentProject .CurrentProject.IconPath}}
+      <img src="/projects/{{.CurrentProject.ID}}/icon" alt="{{.CurrentProject.Name}}" class="tri-logo tri-project-icon">
+    {{else}}
+      <img src="/static/img/logo.svg" alt="triCMS" class="tri-logo">
+    {{end}}
+  </a>
 
   {{/* Mobile-only: replaces everything below with a single "go up one
        level" link, since a multi-level hover breadcrumb doesn't fit (and

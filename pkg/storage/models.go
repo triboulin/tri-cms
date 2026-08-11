@@ -53,6 +53,7 @@ type Project struct {
 	ID         string    `json:"id"`
 	Name       string    `json:"name"`
 	FolderPath string    `json:"folder_path"`
+	IconPath   string    `json:"icon_path"` // filename under Manager.ProjectDir(ID), empty = no custom icon
 	CreatedAt  time.Time `json:"created_at"`
 }
 

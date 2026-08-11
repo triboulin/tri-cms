@@ -8,8 +8,29 @@
     <div class="tri-content">
       {{template "partial:flash" .}}
 
+      <div class="tri-card">
+        <h3><span class="material-icons" aria-hidden="true">image</span> Icône du projet</h3>
+        <div class="tri-project-icon-row">
+          <span class="tri-project-icon-preview">
+            {{if .CurrentProject.IconPath}}<img src="/projects/{{.CurrentProject.ID}}/icon" alt="">
+            {{else}}<span class="material-icons" aria-hidden="true">folder_open</span>{{end}}
+          </span>
+          <form class="tri-inline-form" method="post" action="/projects/{{.CurrentProject.ID}}/icon" enctype="multipart/form-data">
+            <input type="file" name="icon" accept=".png,.jpg,.jpeg,.svg,.webp,.gif" required>
+            <button class="tri-btn tri-btn-sm" type="submit"><span class="material-icons" aria-hidden="true">upload</span> {{if .CurrentProject.IconPath}}Changer{{else}}Téléverser{{end}}</button>
+          </form>
+          {{if .CurrentProject.IconPath}}
+          <form class="tri-inline-form" method="post" action="/projects/{{.CurrentProject.ID}}/icon/delete" data-confirm="Revenir au logo triCMS par défaut ?">
+            <button class="tri-btn tri-btn-sm tri-btn-ghost" type="submit"><span class="material-icons" aria-hidden="true">restart_alt</span> Réinitialiser</button>
+          </form>
+          {{end}}
+        </div>
+        <p class="tri-hint">PNG, JPG, SVG, WebP ou GIF, 2 Mo max. Remplace le logo triCMS par ce projet dans le fil d'ariane.</p>
+      </div>
+
       <div class="tri-section-title">
         <h2><span class="material-icons" aria-hidden="true">schema</span> Schémas de contenu</h2>
+        <button type="button" class="tri-btn tri-btn-sm" data-toggle-target="create-schema"><span class="material-icons" aria-hidden="true">add</span> Nouveau schéma</button>
       </div>
       {{if not .Content.Schemas}}
         <p class="tri-empty">Aucun schéma pour ce projet.</p>
@@ -37,7 +58,7 @@
         </div>
       {{end}}
 
-      <div class="tri-card" id="create-schema">
+      <div class="tri-card" id="create-schema" hidden>
         <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau schéma</h3>
         <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/schemas/create">
           <div class="tri-form-row">

@@ -8,8 +8,42 @@
     <div class="tri-content">
       {{template "partial:flash" .}}
 
+      {{if not .Content.ProjectCards}}
+        <p class="tri-empty">Aucun projet accessible pour le moment.{{if not .User.IsGlobalAdmin}} Contactez un administrateur pour obtenir un accès.{{end}}</p>
+      {{end}}
+
+      {{if or .Content.ProjectCards .User.IsGlobalAdmin}}
+      {{/* A duplicate of the breadcrumb's project-switcher dropdown (desktop
+           already has that), but on mobile the dropdown is replaced by the
+           back button and isn't reachable from here -- this grid is the
+           only way to switch projects from the dashboard on a narrow
+           screen, so it can't be a hint pointing at a menu that no longer
+           exists on that viewport. The "Nouveau projet" tile sits after
+           the real projects and, like every other create action in the
+           app, toggles a hidden form instead of always occupying its own
+           row (see data-toggle-target in app.js). */}}
+      <div class="tri-project-cards">
+        {{range .Content.ProjectCards}}
+        <a class="tri-project-card" href="/projects/{{.Project.ID}}">
+          <span class="tri-project-card-icon">
+            {{if .Project.IconPath}}<img src="/projects/{{.Project.ID}}/icon" alt="">
+            {{else}}<img src="/static/img/favicon.svg" alt="">{{end}}
+          </span>
+          <span class="tri-project-card-name">{{.Project.Name}}</span>
+          <span class="tri-project-card-date">Modifié le {{.LastActivity.Format "02/01/2006"}}</span>
+        </a>
+        {{end}}
+        {{if .User.IsGlobalAdmin}}
+        <button type="button" class="tri-project-card tri-project-card-new" data-toggle-target="create">
+          <span class="tri-project-card-icon"><span class="material-icons" aria-hidden="true">add</span></span>
+          <span class="tri-project-card-name">Nouveau projet</span>
+        </button>
+        {{end}}
+      </div>
+      {{end}}
+
       {{if .User.IsGlobalAdmin}}
-      <div class="tri-card" id="create">
+      <div class="tri-card" id="create" hidden>
         <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau projet</h3>
         <form class="tri-form" method="post" action="/projects/create">
           <label>Nom du projet</label>
@@ -17,22 +51,6 @@
           <button class="tri-btn" type="submit"><span class="material-icons" aria-hidden="true">add</span> Créer le projet</button>
         </form>
       </div>
-      {{end}}
-
-      {{if not .Projects}}
-        <p class="tri-empty">Aucun projet accessible pour le moment.{{if not .User.IsGlobalAdmin}} Contactez un administrateur pour obtenir un accès.{{end}}</p>
-      {{else}}
-        {{/* A duplicate of the breadcrumb's project-switcher dropdown
-             (desktop already has that), but on mobile the dropdown is
-             replaced by the back button and isn't reachable from here --
-             this list is the only way to switch projects from the
-             dashboard on a narrow screen, so it can't be a hint pointing
-             at a menu that no longer exists on that viewport. */}}
-        <div class="tri-project-list">
-          {{range .Projects}}
-          <a class="tri-project-list-item" href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">folder</span> {{.Name}}</a>
-          {{end}}
-        </div>
       {{end}}
     </div>
   </div>

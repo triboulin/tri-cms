@@ -55,6 +55,10 @@ body::before {
 
 /* Logo (marque + wordmark) */
 .tri-logo { height: 22px; display: block; }
+/* A project's custom icon replaces the triCMS wordmark in the breadcrumb --
+   unlike the wordmark it's expected to be roughly square, so it gets an
+   explicit width and a touch of rounding rather than stretching to fit. */
+.tri-project-icon { width: 22px; object-fit: cover; border-radius: 4px; }
 .tri-login-logo { display: flex; justify-content: center; margin-bottom: 16px; }
 .tri-logo-login { height: 44px; display: block; }
 
@@ -124,15 +128,40 @@ body::before {
   padding: 16px;
 }
 .tri-card h3 { margin-top: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; }
-
-/* Dashboard project switcher list -- a fallback for the breadcrumb's
-   dropdown, which mobile can't reach (see dashboard.html). */
-.tri-project-list { display: flex; flex-direction: column; gap: 2px; margin: 8px; }
-.tri-project-list-item {
-  display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 8px;
-  color: var(--tri-text); text-decoration: none; border: 1px solid var(--tri-border);
+.tri-project-icon-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tri-project-icon-preview {
+  width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--tri-border);
+  background: var(--tri-bg-subtle); display: flex; align-items: center; justify-content: center;
+  overflow: hidden; flex-shrink: 0; color: var(--tri-muted);
 }
-.tri-project-list-item:hover { background: var(--tri-bg-subtle); }
+.tri-project-icon-preview img { width: 100%; height: 100%; object-fit: cover; }
+.tri-project-icon-row .tri-inline-form { display: flex; align-items: center; gap: 8px; }
+.tri-project-icon-row input[type="file"] { font-size: 0.82rem; max-width: 220px; }
+
+/* Dashboard project cards -- a fallback for the breadcrumb's project-switcher
+   dropdown, which mobile can't reach (see dashboard.html). The "Nouveau
+   projet" tile is styled the same as a project card so it reads as "one
+   more option in this grid," not a stray button. */
+.tri-project-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin: 8px;
+}
+.tri-project-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 12px;
+  border-radius: 10px; border: 1px solid var(--tri-border); background: var(--tri-card);
+  color: var(--tri-text); text-decoration: none; text-align: center; cursor: pointer;
+  font-family: inherit;
+}
+.tri-project-card:hover { border-color: var(--tri-accent); background: var(--tri-bg-subtle); }
+.tri-project-card-icon {
+  width: 44px; height: 44px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; background: var(--tri-bg-subtle); color: var(--tri-muted);
+}
+.tri-project-card-icon img { width: 100%; height: 100%; object-fit: cover; }
+.tri-project-card-name { font-weight: 600; font-size: 0.92rem; }
+.tri-project-card-date { font-size: 0.76rem; color: var(--tri-muted); }
+.tri-project-card-new { border-style: dashed; color: var(--tri-muted); }
+.tri-project-card-new:hover { color: var(--tri-accent); }
+.tri-project-card-new .tri-project-card-icon { background: transparent; }
 
 .tri-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 table.tri-table { width: 100%; border-collapse: collapse; }
@@ -323,6 +352,10 @@ table.tri-table td.tri-actions { text-align: right; white-space: nowrap; }
   flex: 1; padding: 8px 10px; border: 1px solid var(--tri-border); border-radius: 6px;
   font-family: inherit; font-size: 0.9rem;
 }
+.tri-media-picker-upload-btn { white-space: nowrap; }
+.tri-media-picker-upload-error {
+  color: var(--tri-danger); font-size: 0.82rem; margin: -4px 0 10px;
+}
 .tri-media-picker-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;
   overflow-y: auto; padding: 2px;
@@ -333,6 +366,12 @@ table.tri-table td.tri-actions { text-align: right; white-space: nowrap; }
 }
 .tri-media-picker-item:hover { border-color: var(--tri-accent); }
 .tri-media-picker-item.selected { border-color: var(--tri-accent); box-shadow: 0 0 0 1px var(--tri-accent); }
+/* Focus and "this is the picked value" used to both lean on --tri-accent
+   (the global :focus-visible outline below is the same blue as .selected's
+   border), so tabbing through the grid looked like it was changing the
+   selection. Focus now only ever changes border *width*; color stays
+   whatever .selected/hover/default already say it should be. */
+.tri-media-picker-item:focus-visible { outline: none; border-width: 4px; }
 .tri-media-picker-item-preview {
   display: flex; align-items: center; justify-content: center; height: 80px;
   background: var(--tri-bg-subtle); color: var(--tri-muted);

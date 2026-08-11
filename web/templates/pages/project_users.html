@@ -10,6 +10,7 @@
 
       <div class="tri-section-title">
         <h2><span class="material-icons" aria-hidden="true">group</span> Utilisateurs du projet</h2>
+        <button type="button" class="tri-btn tri-btn-sm" data-toggle-target="create"><span class="material-icons" aria-hidden="true">person_add</span> Attribuer un rôle</button>
       </div>
       {{if not .Content.Permissions}}
         <p class="tri-empty">Aucun utilisateur n'a encore de rôle sur ce projet.</p>
@@ -46,7 +47,7 @@
         </div>
       {{end}}
 
-      <div class="tri-card">
+      <div class="tri-card" id="create" hidden>
         <h3><span class="material-icons" aria-hidden="true">person_add</span> Attribuer un rôle</h3>
         <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/users/assign">
           <div class="tri-form-row">

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -467,6 +468,54 @@ func TestSystemDB_GlobalLogs(t *testing.T) {
 	// Most recent first.
 	if logs[0].Action != "user.suspend" {
 		t.Fatalf("expected most recent log first, got %s", logs[0].Action)
+	}
+}
+
+// TestSystemDB_ProjectLastActivity guards against a regression where
+// MAX(created_at) -- a computed aggregate column with no declared SQL type
+// of its own, unlike a plain "SELECT created_at" -- came back from the
+// driver as a raw string instead of an auto-converted time.Time, and
+// scanning that into a sql.NullTime failed outright. The failure was
+// silent in production (htmxServerError logs nothing), so this needs to be
+// caught here, not just noticed by a human staring at a blank error page.
+func TestSystemDB_ProjectLastActivity(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	createdAt := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// No activity yet: falls back to the project's own creation time.
+	last, err := db.ProjectLastActivity(ctx, "proj-1", createdAt)
+	if err != nil {
+		t.Fatalf("ProjectLastActivity with no logs: %v", err)
+	}
+	if !last.Equal(createdAt) {
+		t.Fatalf("expected fallback to createdAt %v, got %v", createdAt, last)
+	}
+
+	// A log entry logged normally (CURRENT_TIMESTAMP, "now") must not error
+	// out -- this is the exact regression: the aggregate scan used to fail.
+	if err := db.LogAction(ctx, "user-1", "proj-1", "content.create", nil); err != nil {
+		t.Fatalf("log action: %v", err)
+	}
+	if _, err := db.ProjectLastActivity(ctx, "proj-1", createdAt); err != nil {
+		t.Fatalf("ProjectLastActivity after a real LogAction: %v", err)
+	}
+
+	// A log entry with a controlled, later timestamp is correctly picked up
+	// over the fallback.
+	later := createdAt.Add(48 * time.Hour)
+	if _, err := db.DB().ExecContext(ctx,
+		`INSERT INTO global_logs (project_id, action, created_at) VALUES (?, ?, ?)`,
+		"proj-2", "content.update", later.Format("2006-01-02 15:04:05"),
+	); err != nil {
+		t.Fatalf("insert log with explicit timestamp: %v", err)
+	}
+	last, err = db.ProjectLastActivity(ctx, "proj-2", createdAt)
+	if err != nil {
+		t.Fatalf("ProjectLastActivity with explicit later log: %v", err)
+	}
+	if !last.Equal(later) {
+		t.Fatalf("expected last activity %v, got %v", later, last)
 	}
 }
 

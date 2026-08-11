@@ -34,6 +34,9 @@ func mountHTMXRoutes(r chi.Router, s *Server) {
 	r.Get("/projects/{projectID}", s.htmxCollections)
 
 	r.Get("/projects/{projectID}/conception", s.htmxConception)
+	r.Get("/projects/{projectID}/icon", s.htmxProjectIcon)
+	r.Post("/projects/{projectID}/icon", s.htmxUploadProjectIcon)
+	r.Post("/projects/{projectID}/icon/delete", s.htmxDeleteProjectIcon)
 	r.Post("/projects/{projectID}/schemas/create", s.htmxCreateSchema)
 	r.Get("/projects/{projectID}/schemas/{schemaSlug}/edit", s.htmxEditSchemaPage)
 	r.Post("/projects/{projectID}/schemas/{schemaSlug}/update", s.htmxUpdateSchema)
@@ -49,6 +52,7 @@ func mountHTMXRoutes(r chi.Router, s *Server) {
 
 	r.Get("/projects/{projectID}/medias", s.htmxMedias)
 	r.Post("/projects/{projectID}/medias/upload", s.htmxUploadMedia)
+	r.Post("/projects/{projectID}/medias/upload-for-picker", s.htmxUploadMediaForPicker)
 	r.Get("/projects/{projectID}/medias/{mediaID}/file", s.htmxMediaFile)
 	r.Post("/projects/{projectID}/medias/{mediaID}/delete", s.htmxDeleteMedia)
 
@@ -203,13 +207,43 @@ func (s *Server) htmxDashboard(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("view") == "create" && user.IsGlobalAdmin {
 		leaf = "Nouveau projet"
 	}
-	data, err := s.buildPageData(r.Context(), user, nil, "", leaf, nil)
+
+	// Only global admins actually reach this point with projects to show
+	// (non-admins with any were redirected above), but build the card list
+	// unconditionally -- it's a no-op query loop over an empty slice
+	// otherwise, and keeps this handler from silently depending on that
+	// upstream redirect always running first.
+	projects, err := s.System.ListProjectsForUser(r.Context(), user.ID, user.IsGlobalAdmin)
+	if err != nil {
+		s.htmxServerError(w, r)
+		return
+	}
+	cards := make([]dashboardProjectCard, 0, len(projects))
+	for _, p := range projects {
+		lastActivity, err := s.System.ProjectLastActivity(r.Context(), p.ID, p.CreatedAt)
+		if err != nil {
+			s.htmxServerError(w, r)
+			return
+		}
+		cards = append(cards, dashboardProjectCard{Project: p, LastActivity: lastActivity})
+	}
+
+	data, err := s.buildPageData(r.Context(), user, nil, "", leaf, struct {
+		ProjectCards []dashboardProjectCard
+	}{cards})
 	if err != nil {
 		s.htmxServerError(w, r)
 		return
 	}
 	applyFlash(r, data)
 	s.render(w, "page:dashboard", data)
+}
+
+// dashboardProjectCard decorates a project with its last-activity time for
+// the dashboard's card grid (see ProjectLastActivity).
+type dashboardProjectCard struct {
+	Project      *storage.Project
+	LastActivity time.Time
 }
 
 // htmxCreateProject creates a project from the dashboard's "Nouveau projet"
@@ -254,13 +288,17 @@ func (s *Server) htmxCreateProject(w http.ResponseWriter, r *http.Request) {
 	redirectWithFlash(w, r, "/projects/"+proj.ID, "Projet « "+name+" » créé.", "success")
 }
 
-// loadProjectForHTMX resolves {projectID}, returning (nil,nil) with the
-// response already written if the caller must stop (redirect/403/404).
-func (s *Server) loadProjectForHTMX(w http.ResponseWriter, r *http.Request, section auth.Section) (*storage.User, *storage.Project) {
-	user := s.htmxCurrentUser(r)
+// resolveProjectAndRole resolves {projectID} and the current user's role on
+// it (nil role for global admins or users with no project permission row),
+// without enforcing any section/access gate -- loadProjectForHTMX and
+// loadProjectForHTMXAny below apply their own check on top. ok is false
+// once the response has already been written (redirect/403/404) and the
+// caller must stop.
+func (s *Server) resolveProjectAndRole(w http.ResponseWriter, r *http.Request) (user *storage.User, project *storage.Project, role *storage.Role, ok bool) {
+	user = s.htmxCurrentUser(r)
 	if user == nil {
 		redirectToLogin(w, r)
-		return nil, nil
+		return nil, nil, nil, false
 	}
 	project, err := s.System.GetProject(r.Context(), chi.URLParam(r, "projectID"))
 	if err != nil {
@@ -269,15 +307,23 @@ func (s *Server) loadProjectForHTMX(w http.ResponseWriter, r *http.Request, sect
 		} else {
 			s.htmxServerError(w, r)
 		}
-		return nil, nil
+		return nil, nil, nil, false
 	}
-
-	var role *storage.Role
 	if !user.IsGlobalAdmin {
 		pp, err := s.System.GetProjectPermission(r.Context(), user.ID, project.ID)
 		if err == nil {
 			role = &pp.Role
 		}
+	}
+	return user, project, role, true
+}
+
+// loadProjectForHTMX resolves {projectID}, returning (nil,nil) with the
+// response already written if the caller must stop (redirect/403/404).
+func (s *Server) loadProjectForHTMX(w http.ResponseWriter, r *http.Request, section auth.Section) (*storage.User, *storage.Project) {
+	user, project, role, ok := s.resolveProjectAndRole(w, r)
+	if !ok {
+		return nil, nil
 	}
 	if !auth.CanAccessSection(user.IsGlobalAdmin, role, section) {
 		http.Error(w, "403 forbidden", http.StatusForbidden)
@@ -285,6 +331,22 @@ func (s *Server) loadProjectForHTMX(w http.ResponseWriter, r *http.Request, sect
 	}
 	if user.LastProjectID == nil || *user.LastProjectID != project.ID {
 		_ = s.System.SetLastProject(r.Context(), user.ID, project.ID)
+	}
+	return user, project
+}
+
+// loadProjectForHTMXAny is loadProjectForHTMX without a specific section
+// gate: any project member (or global admin) passes, no matter their role.
+// For things that must be reachable regardless of section access, like the
+// project icon shown in the breadcrumb on every page of the project.
+func (s *Server) loadProjectForHTMXAny(w http.ResponseWriter, r *http.Request) (*storage.User, *storage.Project) {
+	user, project, role, ok := s.resolveProjectAndRole(w, r)
+	if !ok {
+		return nil, nil
+	}
+	if !auth.CanAccessProject(user.IsGlobalAdmin, role) {
+		http.Error(w, "403 forbidden", http.StatusForbidden)
+		return nil, nil
 	}
 	return user, project
 }

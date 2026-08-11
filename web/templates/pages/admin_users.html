@@ -8,7 +8,7 @@
     <div class="tri-content">
       {{template "partial:flash" .}}
 
-      <div class="tri-card" id="create">
+      <div class="tri-card" id="create" hidden>
         <h3><span class="material-icons" aria-hidden="true">person_add</span> Nouveau compte</h3>
         <form class="tri-form" method="post" action="/admin/users/create">
           <div class="tri-form-row">
@@ -29,7 +29,10 @@
         </form>
       </div>
 
-      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">group</span> Comptes globaux</h2></div>
+      <div class="tri-section-title">
+        <h2><span class="material-icons" aria-hidden="true">group</span> Comptes globaux</h2>
+        <button type="button" class="tri-btn tri-btn-sm" data-toggle-target="create"><span class="material-icons" aria-hidden="true">person_add</span> Nouveau compte</button>
+      </div>
       <div class="tri-table-scroll">
       <table class="tri-table">
         <thead><tr><th>Email</th><th>Admin global</th><th></th></tr></thead>

@@ -8,7 +8,10 @@
     <div class="tri-content">
       {{template "partial:flash" .}}
 
-      <div class="tri-section-title"><h2><span class="material-icons" aria-hidden="true">webhook</span> Webhooks</h2></div>
+      <div class="tri-section-title">
+        <h2><span class="material-icons" aria-hidden="true">webhook</span> Webhooks</h2>
+        <button type="button" class="tri-btn tri-btn-sm" data-toggle-target="create"><span class="material-icons" aria-hidden="true">add</span> Nouveau webhook</button>
+      </div>
       {{if not .Content.Webhooks}}
         <p class="tri-empty">Aucun webhook configuré pour ce projet.</p>
       {{else}}
@@ -88,7 +91,7 @@
         {{end}}
       </div>
 
-      <div class="tri-card" id="create">
+      <div class="tri-card" id="create" hidden>
         <h3><span class="material-icons" aria-hidden="true">add_circle</span> Nouveau webhook</h3>
         <form class="tri-form" method="post" action="/projects/{{.CurrentProject.ID}}/webhooks/create">
           <label>Type</label>
