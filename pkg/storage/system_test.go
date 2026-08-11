@@ -321,6 +321,59 @@ func TestSystemDB_WebhookDeliveries(t *testing.T) {
 	}
 }
 
+func TestSystemDB_WebhookDelivery_DeployState(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	proj := &Project{ID: "proj_whds", Name: "WHDS", FolderPath: "./data/projects/proj_whds"}
+	if err := db.CreateProject(ctx, proj); err != nil {
+		t.Fatal(err)
+	}
+	d := &WebhookDelivery{WebhookID: "wh1", ProjectID: proj.ID, Event: "content.publish", Success: true, Attempts: 1, StatusCode: 202}
+	if err := db.RecordWebhookDelivery(ctx, d); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	deliveries, err := db.ListWebhookDeliveries(ctx, proj.ID, 10)
+	if err != nil || len(deliveries) != 1 {
+		t.Fatalf("expected 1 delivery: %v (%d)", err, len(deliveries))
+	}
+	got := deliveries[0]
+	if got.DeployRunID != 0 || got.DeployStatus != "" || got.DeployConclusion != "" || got.DeployRunURL != "" {
+		t.Fatalf("expected empty deploy state by default: %+v", got)
+	}
+	if got.DeployFinal() {
+		t.Fatal("empty deploy status must not be considered final")
+	}
+
+	if err := db.UpdateWebhookDeliveryDeployState(ctx, got.ID, 12345, "in_progress", "", "https://github.com/o/r/actions/runs/12345"); err != nil {
+		t.Fatalf("update to in_progress: %v", err)
+	}
+	deliveries, _ = db.ListWebhookDeliveries(ctx, proj.ID, 10)
+	got = deliveries[0]
+	if got.DeployRunID != 12345 || got.DeployStatus != "in_progress" || got.DeployRunURL == "" {
+		t.Fatalf("expected in_progress deploy state: %+v", got)
+	}
+	if got.DeployFinal() {
+		t.Fatal("in_progress must not be considered final")
+	}
+
+	if err := db.UpdateWebhookDeliveryDeployState(ctx, got.ID, 12345, "completed", "success", got.DeployRunURL); err != nil {
+		t.Fatalf("update to completed: %v", err)
+	}
+	deliveries, _ = db.ListWebhookDeliveries(ctx, proj.ID, 10)
+	got = deliveries[0]
+	if got.DeployStatus != "completed" || got.DeployConclusion != "success" {
+		t.Fatalf("expected completed/success deploy state: %+v", got)
+	}
+	if !got.DeployFinal() {
+		t.Fatal("completed must be considered final")
+	}
+
+	if err := db.UpdateWebhookDeliveryDeployState(ctx, 999999, 1, "queued", "", ""); err == nil {
+		t.Fatal("expected error updating a non-existent delivery id")
+	}
+}
+
 func TestSystemDB_SetLastProject(t *testing.T) {
 	ctx := context.Background()
 	db := newTestSystemDB(t)

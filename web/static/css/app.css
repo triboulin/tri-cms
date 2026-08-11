@@ -11,6 +11,7 @@
   --tri-card: #ffffff;
   --tri-border: #e1e4e8;
   --tri-success: #16a34a;
+  --tri-warning: #b45309;
 }
 * { box-sizing: border-box; }
 body {
@@ -206,6 +207,7 @@ table.tri-table td.tri-actions { text-align: right; white-space: nowrap; }
 }
 .tri-badge-success { background: var(--tri-success); }
 .tri-badge-danger { background: var(--tri-danger); }
+.tri-badge-warning { background: var(--tri-warning); }
 .tri-btn {
   background: var(--tri-accent); color: #fff; border: none; border-radius: 6px;
   padding: 8px 14px; cursor: pointer; font-size: 0.88rem; text-decoration: none;

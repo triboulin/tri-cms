@@ -53,6 +53,7 @@ CREATE TABLE projects (
     id TEXT PRIMARY KEY, -- Ex: "projAAA"
     name TEXT NOT NULL,
     folder_path TEXT NOT NULL,
+    icon_path TEXT NOT NULL DEFAULT '', -- fichier sous Manager.ProjectDir(id) ; vide = logo triCMS par défaut dans le fil d'ariane
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -90,6 +91,22 @@ CREATE TABLE global_logs (
     details JSON,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE webhook_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    webhook_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    event TEXT NOT NULL,
+    success BOOLEAN NOT NULL,      -- true = triCMS's own call (generic POST, or the repository_dispatch call) was accepted
+    attempts INTEGER NOT NULL DEFAULT 0,
+    status_code INTEGER NOT NULL DEFAULT 0,
+    error TEXT NOT NULL DEFAULT '',
+    deploy_run_id INTEGER NOT NULL DEFAULT 0,      -- kind=github_dispatch only: correlated GitHub Actions run id, 0 = not yet correlated
+    deploy_status TEXT NOT NULL DEFAULT '',        -- '' | 'queued' | 'in_progress' | 'completed'
+    deploy_conclusion TEXT NOT NULL DEFAULT '',    -- '' until completed, then 'success' | 'failure' | 'cancelled' | ...
+    deploy_run_url TEXT NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 > **Précisions** :
@@ -102,6 +119,7 @@ CREATE TABLE global_logs (
 > - `webhooks.kind` distingue deux mécanismes de livraison, tous deux couverts par la même politique de retry/backoff (`pkg/webhooks.Dispatcher`) :
 >   - `generic` (défaut) : POST signé (HMAC-SHA256, header `X-TriCMS-Signature: sha256=<hex>`) vers `webhooks.url`, avec `webhooks.secret` en clair.
 >   - `github_dispatch` : déclenche `POST https://api.github.com/repos/{owner}/{repo}/dispatches` (`repository_dispatch`) au lieu d'une URL arbitraire — pensé pour republier un site statique (ex: SvelteKit/Cloudflare Pages) dès qu'un contenu est publié, sans relais intermédiaire. `webhooks.config` est un JSON `{"owner", "repo", "token"}` ; `token` (PAT GitHub) y est chiffré au repos (AES-256-GCM, `pkg/auth.Encryptor`, clé dérivée de `TRICMS_ENCRYPTION_KEY`) et n'est jamais renvoyé en clair par l'API ou l'IHM une fois stocké.
+> - `webhook_deliveries.success` ne reflète que l'appel HTTP de triCMS lui-même (POST générique accepté, ou `repository_dispatch` accepté par l'API GitHub) — pas le résultat du build/déploiement déclenché en aval. Pour les webhooks `kind=github_dispatch`, les colonnes `deploy_*` suivent ce résultat réel via un mécanisme de **polling initié par le client** : à chaque rafraîchissement HTMX de la page Webhooks (`hx-trigger="every 5s"`, existant), `htmxWebhooks` appelle `reconcileGitHubDispatchDeploys` (`pkg/api/htmx_webhooks.go`), qui corrèle la livraison au run GitHub Actions déclenché (`pkg/webhooks.Dispatcher.FindDispatchRun`, par proximité temporelle avec `webhook_deliveries.created_at` — l'API `repository_dispatch` ne renvoie aucun identifiant de run) puis interroge son statut (`Dispatcher.GetRun`) tant que `deploy_status != 'completed'`. Aucun poller côté serveur : si personne n'a la page ouverte, rien n'est interrogé. Le nombre de livraisons non résolues vérifiées par chargement de page est plafonné (`maxReconcilePerLoad`), avec un budget de temps global court, pour qu'une API GitHub lente ou indisponible ne bloque jamais le rendu de la page — toute erreur (réseau, ou PAT sans la permission **Actions: Read**, distincte de **Contents: Read and write** déjà requise pour l'envoi) est absorbée silencieusement et réessayée au prochain poll, jamais remontée comme une erreur applicative.
 
 ### 2.2 Base Projet (`./data/projects/{project_id}/client.db`)
 

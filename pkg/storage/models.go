@@ -104,6 +104,28 @@ type WebhookDelivery struct {
 	StatusCode int       `json:"status_code"`
 	Error      string    `json:"error"`
 	CreatedAt  time.Time `json:"created_at"`
+
+	// DeployRunID/DeployStatus/DeployConclusion/DeployRunURL track the
+	// downstream GitHub Actions run a kind=github_dispatch delivery most
+	// likely triggered (see pkg/webhooks.Dispatcher.FindDispatchRun/GetRun).
+	// Success above only means "GitHub accepted the dispatch call" -- these
+	// fields are the actual build/deploy outcome, populated by best-effort
+	// polling from the Webhooks page while DeployStatus is still non-final
+	// (empty, "queued", or "in_progress"); left empty for generic webhooks,
+	// failed dispatches, or a github_dispatch run that hasn't been
+	// correlated yet.
+	DeployRunID      int64  `json:"deploy_run_id,omitempty"`
+	DeployStatus     string `json:"deploy_status,omitempty"`     // "" | "queued" | "in_progress" | "completed"
+	DeployConclusion string `json:"deploy_conclusion,omitempty"` // "" until completed, then "success" | "failure" | "cancelled" | ...
+	DeployRunURL     string `json:"deploy_run_url,omitempty"`
+}
+
+// DeployFinal reports whether DeployStatus has reached a terminal state (no
+// more polling needed) -- "completed" regardless of conclusion, since a
+// completed run's conclusion (success/failure/cancelled/...) doesn't change
+// afterward.
+func (d *WebhookDelivery) DeployFinal() bool {
+	return d.DeployStatus == "completed"
 }
 
 type GlobalLog struct {

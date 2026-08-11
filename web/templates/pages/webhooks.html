@@ -67,7 +67,7 @@
         {{else}}
         <div class="tri-table-scroll">
         <table class="tri-table">
-          <thead><tr><th>Date</th><th>Webhook</th><th>Évènement</th><th>Statut</th><th>Tentatives</th><th>Détail</th></tr></thead>
+          <thead><tr><th>Date</th><th>Webhook</th><th>Évènement</th><th>Envoi</th><th>Déploiement</th><th>Tentatives</th><th>Détail</th></tr></thead>
           <tbody>
             {{range .Content.Deliveries}}
             <tr>
@@ -79,6 +79,17 @@
                   <span class="tri-badge tri-badge-success">OK</span>
                 {{else}}
                   <span class="tri-badge tri-badge-danger">Échec</span>
+                {{end}}
+              </td>
+              <td>
+                {{if .DeployBadge}}
+                  {{if .DeployBadge.URL}}
+                    <a class="tri-badge {{.DeployBadge.Class}}" href="{{.DeployBadge.URL}}" target="_blank" rel="noopener" style="text-decoration:none;">{{.DeployBadge.Label}}</a>
+                  {{else}}
+                    <span class="tri-badge {{.DeployBadge.Class}}">{{.DeployBadge.Label}}</span>
+                  {{end}}
+                {{else}}
+                  <span class="tri-badge-outline">—</span>
                 {{end}}
               </td>
               <td>{{.Delivery.Attempts}}</td>

@@ -72,6 +72,10 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     attempts INTEGER NOT NULL DEFAULT 0,
     status_code INTEGER NOT NULL DEFAULT 0,
     error TEXT NOT NULL DEFAULT '',
+    deploy_run_id INTEGER NOT NULL DEFAULT 0,
+    deploy_status TEXT NOT NULL DEFAULT '',
+    deploy_conclusion TEXT NOT NULL DEFAULT '',
+    deploy_run_url TEXT NOT NULL DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_project ON webhook_deliveries(project_id, created_at DESC);
@@ -110,6 +114,10 @@ func OpenSystemDB(dsn string) (*SystemDB, error) {
 		return nil, fmt.Errorf("migrate system db: %w", err)
 	}
 	if err := migrateProjectColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate system db: %w", err)
+	}
+	if err := migrateWebhookDeliveryColumns(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate system db: %w", err)
 	}
@@ -155,6 +163,27 @@ func migrateProjectColumns(db *sql.DB) error {
 	_, err := db.Exec(`ALTER TABLE projects ADD COLUMN icon_path TEXT NOT NULL DEFAULT ''`)
 	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
 		return err
+	}
+	return nil
+}
+
+// migrateWebhookDeliveryColumns adds the deploy_run_* columns to
+// pre-existing webhook_deliveries tables (from before deploy-status
+// polling existed), the same pattern as the other migrate*Columns above.
+func migrateWebhookDeliveryColumns(db *sql.DB) error {
+	stmts := []string{
+		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_run_id INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_status TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_conclusion TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_run_url TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+				continue
+			}
+			return err
+		}
 	}
 	return nil
 }
@@ -631,7 +660,8 @@ func (s *SystemDB) RecordWebhookDelivery(ctx context.Context, d *WebhookDelivery
 // (across all of its webhooks), newest first, capped at limit.
 func (s *SystemDB) ListWebhookDeliveries(ctx context.Context, projectID string, limit int) ([]*WebhookDelivery, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, webhook_id, project_id, event, success, attempts, status_code, error, created_at
+		`SELECT id, webhook_id, project_id, event, success, attempts, status_code, error,
+		        deploy_run_id, deploy_status, deploy_conclusion, deploy_run_url, created_at
 		 FROM webhook_deliveries WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
 		projectID, limit)
 	if err != nil {
@@ -641,12 +671,29 @@ func (s *SystemDB) ListWebhookDeliveries(ctx context.Context, projectID string, 
 	var out []*WebhookDelivery
 	for rows.Next() {
 		var d WebhookDelivery
-		if err := rows.Scan(&d.ID, &d.WebhookID, &d.ProjectID, &d.Event, &d.Success, &d.Attempts, &d.StatusCode, &d.Error, &d.CreatedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.WebhookID, &d.ProjectID, &d.Event, &d.Success, &d.Attempts, &d.StatusCode, &d.Error,
+			&d.DeployRunID, &d.DeployStatus, &d.DeployConclusion, &d.DeployRunURL, &d.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, &d)
 	}
 	return out, rows.Err()
+}
+
+// UpdateWebhookDeliveryDeployState persists a github_dispatch delivery's
+// correlated downstream run state, so the next page load/poll doesn't need
+// to re-query GitHub for a delivery that's already resolved (or already
+// being tracked by run id). Called from the Webhooks page's best-effort
+// reconciliation, never from the dispatch path itself -- see
+// pkg/webhooks.Dispatcher.FindDispatchRun/GetRun.
+func (s *SystemDB) UpdateWebhookDeliveryDeployState(ctx context.Context, deliveryID, runID int64, status, conclusion, runURL string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE webhook_deliveries SET deploy_run_id = ?, deploy_status = ?, deploy_conclusion = ?, deploy_run_url = ? WHERE id = ?`,
+		runID, status, conclusion, runURL, deliveryID)
+	if err != nil {
+		return err
+	}
+	return checkRowsAffected(res)
 }
 
 // ---- Global Logs ----

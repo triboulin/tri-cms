@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -45,6 +47,103 @@ func webhookEventOptions(selected []string) []webhookEventOption {
 type webhookDeliveryVM struct {
 	WebhookLabel string
 	Delivery     *storage.WebhookDelivery
+	DeployBadge  *deployBadge // nil when not a github_dispatch delivery, or not correlated to a run yet
+}
+
+// deployBadge describes how to render a github_dispatch delivery's
+// downstream build/deploy state (as opposed to Delivery.Success, which only
+// means "GitHub accepted the dispatch call") in the history table.
+type deployBadge struct {
+	Label string
+	Class string // one of the .tri-badge-* modifiers
+	URL   string // link to the GitHub Actions run; empty until correlated
+}
+
+func deployStatusBadge(d *storage.WebhookDelivery) *deployBadge {
+	switch d.DeployStatus {
+	case "":
+		return nil
+	case "queued":
+		return &deployBadge{Label: "Déploiement en attente", Class: "tri-badge-warning", URL: d.DeployRunURL}
+	case "in_progress":
+		return &deployBadge{Label: "Déploiement en cours", Class: "tri-badge-warning", URL: d.DeployRunURL}
+	case "completed":
+		switch d.DeployConclusion {
+		case "success":
+			return &deployBadge{Label: "Déployé", Class: "tri-badge-success", URL: d.DeployRunURL}
+		case "failure", "timed_out":
+			return &deployBadge{Label: "Échec du déploiement", Class: "tri-badge-danger", URL: d.DeployRunURL}
+		default: // cancelled, action_required, stale, skipped, neutral, or a future value we don't special-case
+			label := d.DeployConclusion
+			if label == "" {
+				label = "Terminé"
+			}
+			return &deployBadge{Label: label, Class: "tri-badge-outline", URL: d.DeployRunURL}
+		}
+	default:
+		return &deployBadge{Label: d.DeployStatus, Class: "tri-badge-outline", URL: d.DeployRunURL}
+	}
+}
+
+// reconcileGitHubDispatchDeploys best-effort correlates and polls the
+// downstream GitHub Actions run for recent kind=github_dispatch deliveries
+// whose deploy state isn't final yet (see storage.WebhookDelivery.DeployFinal),
+// so the Webhooks page can show the real build/deploy outcome instead of
+// just "GitHub accepted the dispatch call". Client-initiated polling: this
+// only ever runs because a browser has the Webhooks page open and its 5s
+// HTMX auto-refresh (see webhooks.html) hit this handler again -- there is
+// no server-side background poller, so nothing happens while nobody's
+// looking.
+//
+// Bounded on two axes so a slow/unreachable GitHub API can't stall the
+// page: a short overall time budget, and a cap on how many deliveries get
+// checked per page load (in normal use there's at most one delivery
+// in-flight at a time; the cap just protects against a burst). Any GitHub
+// API error -- including a 401/403 from a token that hasn't been granted
+// the Actions: Read permission yet -- is swallowed here: the delivery's
+// deploy state simply stays whatever it already was, tried again on the
+// next poll, never surfaced as a page error.
+func (s *Server) reconcileGitHubDispatchDeploys(ctx context.Context, whByID map[string]*storage.Webhook, deliveries []*storage.WebhookDelivery) {
+	if s.Dispatcher == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+
+	const maxReconcilePerLoad = 5
+	checked := 0
+	for _, d := range deliveries {
+		if checked >= maxReconcilePerLoad || ctx.Err() != nil {
+			return
+		}
+		if !d.Success || d.DeployFinal() {
+			continue // the dispatch call itself failed, or this is already resolved
+		}
+		wh, ok := whByID[d.WebhookID]
+		if !ok || wh.Kind != webhooks.KindGitHubDispatch {
+			continue
+		}
+		var cfg webhooks.GitHubDispatchConfig
+		if err := json.Unmarshal([]byte(wh.Config), &cfg); err != nil {
+			continue
+		}
+		checked++
+
+		var run *webhooks.RunInfo
+		var err error
+		if d.DeployRunID != 0 {
+			run, err = s.Dispatcher.GetRun(ctx, cfg.Owner, cfg.Repo, cfg.Token, d.DeployRunID)
+		} else {
+			run, err = s.Dispatcher.FindDispatchRun(ctx, cfg.Owner, cfg.Repo, cfg.Token, d.CreatedAt)
+		}
+		if err != nil || run == nil {
+			continue // couldn't tell right now, or GitHub hasn't queued the run yet -- retry next poll
+		}
+		if err := s.System.UpdateWebhookDeliveryDeployState(ctx, d.ID, run.ID, run.Status, run.Conclusion, run.HTMLURL); err != nil {
+			continue
+		}
+		d.DeployRunID, d.DeployStatus, d.DeployConclusion, d.DeployRunURL = run.ID, run.Status, run.Conclusion, run.HTMLURL
+	}
 }
 
 type webhookRowVM struct {
@@ -105,6 +204,7 @@ func (s *Server) htmxWebhooks(w http.ResponseWriter, r *http.Request) {
 		s.htmxServerError(w, r)
 		return
 	}
+	s.reconcileGitHubDispatchDeploys(r.Context(), whByID, deliveries)
 	deliveryRows := make([]webhookDeliveryVM, 0, len(deliveries))
 	for _, d := range deliveries {
 		label := d.WebhookID
@@ -118,6 +218,7 @@ func (s *Server) htmxWebhooks(w http.ResponseWriter, r *http.Request) {
 		deliveryRows = append(deliveryRows, webhookDeliveryVM{
 			WebhookLabel: label,
 			Delivery:     d,
+			DeployBadge:  deployStatusBadge(d),
 		})
 	}
 
