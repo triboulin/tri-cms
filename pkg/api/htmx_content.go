@@ -507,6 +507,11 @@ func (s *Server) renderContentForm(w http.ResponseWriter, r *http.Request, user 
 		s.htmxServerError(w, r)
 		return
 	}
+	// Override the generic "back to Collections root" default: the form's
+	// actual parent is this specific schema's content list, not the list
+	// of every schema in the project.
+	data.BackLabel = sc.Name
+	data.BackURL = "/projects/" + project.ID + "/schemas/" + sc.Slug + "/contents"
 	if flash != "" {
 		data.Flash, data.FlashKind = flash, flashKind
 	} else {

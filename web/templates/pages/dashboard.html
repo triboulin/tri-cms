@@ -22,7 +22,17 @@
       {{if not .Projects}}
         <p class="tri-empty">Aucun projet accessible pour le moment.{{if not .User.IsGlobalAdmin}} Contactez un administrateur pour obtenir un accès.{{end}}</p>
       {{else}}
-        <p class="tri-empty">Retrouvez vos projets dans le menu déroulant en haut à gauche.</p>
+        {{/* A duplicate of the breadcrumb's project-switcher dropdown
+             (desktop already has that), but on mobile the dropdown is
+             replaced by the back button and isn't reachable from here --
+             this list is the only way to switch projects from the
+             dashboard on a narrow screen, so it can't be a hint pointing
+             at a menu that no longer exists on that viewport. */}}
+        <div class="tri-project-list">
+          {{range .Projects}}
+          <a class="tri-project-list-item" href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">folder</span> {{.Name}}</a>
+          {{end}}
+        </div>
       {{end}}
     </div>
   </div>

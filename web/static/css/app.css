@@ -58,11 +58,29 @@ body::before {
 .tri-login-logo { display: flex; justify-content: center; margin-bottom: 16px; }
 .tri-logo-login { height: 44px; display: block; }
 
-/* Breadcrumb with hover dropdowns (replaces the old sidebar). */
+/* Breadcrumb with hover dropdowns (replaces the old sidebar). On mobile
+   (<=720px) the multi-level trail is replaced by a single "back one level"
+   link -- see .tri-back-mobile / .tri-breadcrumb-trail below. */
 .tri-breadcrumb { color: var(--tri-muted); font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
 .tri-breadcrumb > a { color: var(--tri-muted); text-decoration: none; display: flex; align-items: center; gap: 4px; }
 .tri-breadcrumb > a:hover { color: var(--tri-text); }
 .tri-breadcrumb strong { color: var(--tri-text); }
+.tri-breadcrumb-trail { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+/* Mobile-only back button: hidden on desktop, shown in place of
+   .tri-breadcrumb-trail under the 720px breakpoint below. Deliberately
+   plain/textual (no border/background) rather than a full .tri-btn --
+   this sits inline with the logo in a topbar, not in a button row.
+   Selector is qualified as ".tri-breadcrumb > a.tri-back-mobile" (not just
+   ".tri-back-mobile") to out-specificity the generic ".tri-breadcrumb > a"
+   rule above, which would otherwise win the display:flex/none conflict
+   regardless of source order since it also matches this same <a>. */
+.tri-breadcrumb > a.tri-back-mobile {
+  display: none; align-items: center; gap: 2px; min-width: 0;
+  color: var(--tri-muted); text-decoration: none; font-size: 0.9rem;
+}
+.tri-back-mobile:hover { color: var(--tri-text); }
+.tri-back-mobile-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45vw; }
 .tri-crumb-icon { font-size: 18px; }
 .tri-crumb-sep { font-size: 18px; color: var(--tri-border); }
 .tri-crumb { position: relative; }
@@ -106,6 +124,16 @@ body::before {
   padding: 16px;
 }
 .tri-card h3 { margin-top: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; }
+
+/* Dashboard project switcher list -- a fallback for the breadcrumb's
+   dropdown, which mobile can't reach (see dashboard.html). */
+.tri-project-list { display: flex; flex-direction: column; gap: 2px; margin: 8px; }
+.tri-project-list-item {
+  display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 8px;
+  color: var(--tri-text); text-decoration: none; border: 1px solid var(--tri-border);
+}
+.tri-project-list-item:hover { background: var(--tri-bg-subtle); }
+
 .tri-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 table.tri-table { width: 100%; border-collapse: collapse; }
 table.tri-table th {
@@ -392,16 +420,10 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 .tri-table-scroll table.tri-table { min-width: 480px; }
 
 @media (max-width: 720px) {
-  .tri-topbar { align-items: flex-start; gap: 8px; padding: 10px 12px; }
-  .tri-breadcrumb { flex-wrap: wrap; }
+  .tri-topbar { align-items: center; gap: 8px; padding: 10px 12px; }
   .tri-content { padding: 14px; }
   .tri-form-row { flex-direction: column; gap: 0; }
   .tri-media-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
-  /* Only the crumb(s) after the first one risk overflowing the right edge
-     on narrow screens -- the first crumb sits right after the logo, near
-     the left edge, so forcing it right-aligned pushed its dropdown off the
-     left side of the viewport instead. */
-  .tri-crumb ~ .tri-crumb .tri-crumb-dropdown { left: auto; right: 0; }
   .tri-table-filter { max-width: none; }
   /* The email is redundant on mobile (Déconnexion is the only action that
      matters, and horizontal space is tight); still present in the DOM for
@@ -409,6 +431,21 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   .tri-user-email { display: none; }
   .tri-card { margin: 6px; padding: 12px; }
   .tri-grid { gap: 8px; }
+
+  /* Replace the multi-level hover breadcrumb with a single back link: the
+     hover-dropdown trail doesn't fit a narrow screen and doesn't suit touch
+     (see app.js's touch-vs-hover fix), so mobile gets one deterministic
+     "go up one level" action instead, computed server-side per page
+     (render.go's BackLabel/BackURL). The logo stays visible either way as
+     the one constant way back to the dashboard. */
+  .tri-breadcrumb-trail { display: none; }
+  .tri-breadcrumb > a.tri-back-mobile { display: flex; }
+
+  /* Logout is only shown on the dashboard on mobile -- everywhere else the
+     back button is the sole action next to the logo, and stacking a second
+     icon there crowds a topbar that's already tight; logging out from a
+     sub-page is one back-tap away. */
+  .tri-logout-hide-mobile { display: none; }
 }
 
 @media (max-width: 480px) {

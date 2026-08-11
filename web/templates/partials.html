@@ -35,51 +35,65 @@
 <div class="tri-breadcrumb">
   <a href="/"><img src="/static/img/logo.svg" alt="triCMS" class="tri-logo"></a>
 
-  <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
-  <div class="tri-crumb tri-crumb-hover">
-    {{if .CurrentProject}}
-      <span><span class="material-icons tri-crumb-icon" aria-hidden="true">folder_open</span> {{.CurrentProject.Name}}</span>
-    {{else if .IsAdmin}}
-      <span><span class="material-icons tri-crumb-icon" aria-hidden="true">admin_panel_settings</span> Administration</span>
-    {{else}}
-      <span><span class="material-icons tri-crumb-icon" aria-hidden="true">table_view</span> Mes projets</span>
-    {{end}}
-    <span class="material-icons tri-crumb-caret" aria-hidden="true">expand_more</span>
-    <div class="tri-crumb-dropdown">
-      {{range .Projects}}
-        {{if and $.CurrentProject (eq $.CurrentProject.ID .ID)}}
-        <a class="active" href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">folder_open</span> {{.Name}}</a>
-        {{else}}
-        <a href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">folder</span> {{.Name}}</a>
+  {{/* Mobile-only: replaces everything below with a single "go up one
+       level" link, since a multi-level hover breadcrumb doesn't fit (and
+       doesn't work well with touch) on a narrow screen. BackLabel/BackURL
+       are computed server-side in buildPageData -- see render.go. Absent
+       (no link at all) only on the dashboard, the top of the hierarchy. */}}
+  {{if .BackURL}}
+  <a href="{{.BackURL}}" class="tri-back-mobile">
+    <span class="material-icons" aria-hidden="true">chevron_left</span>
+    <span class="tri-back-mobile-label">{{.BackLabel}}</span>
+  </a>
+  {{end}}
+
+  <div class="tri-breadcrumb-trail">
+    <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
+    <div class="tri-crumb tri-crumb-hover">
+      {{if .CurrentProject}}
+        <span><span class="material-icons tri-crumb-icon" aria-hidden="true">folder_open</span> {{.CurrentProject.Name}}</span>
+      {{else if .IsAdmin}}
+        <span><span class="material-icons tri-crumb-icon" aria-hidden="true">admin_panel_settings</span> Administration</span>
+      {{else}}
+        <span><span class="material-icons tri-crumb-icon" aria-hidden="true">table_view</span> Mes projets</span>
+      {{end}}
+      <span class="material-icons tri-crumb-caret" aria-hidden="true">expand_more</span>
+      <div class="tri-crumb-dropdown">
+        {{range .Projects}}
+          {{if and $.CurrentProject (eq $.CurrentProject.ID .ID)}}
+          <a class="active" href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">folder_open</span> {{.Name}}</a>
+          {{else}}
+          <a href="/projects/{{.ID}}"><span class="material-icons" aria-hidden="true">folder</span> {{.Name}}</a>
+          {{end}}
         {{end}}
-      {{end}}
-      {{if .User.IsGlobalAdmin}}
-      {{if .Projects}}<div class="tri-crumb-dropdown-sep"></div>{{end}}
-      <a href="/?view=create#create"><span class="material-icons" aria-hidden="true">add</span> Nouveau projet</a>
-      <a href="/admin/projects" class="{{if .IsAdmin}}active{{end}}"><span class="material-icons" aria-hidden="true">admin_panel_settings</span> Administration</a>
-      {{end}}
+        {{if .User.IsGlobalAdmin}}
+        {{if .Projects}}<div class="tri-crumb-dropdown-sep"></div>{{end}}
+        <a href="/?view=create#create"><span class="material-icons" aria-hidden="true">add</span> Nouveau projet</a>
+        <a href="/admin/projects" class="{{if .IsAdmin}}active{{end}}"><span class="material-icons" aria-hidden="true">admin_panel_settings</span> Administration</a>
+        {{end}}
+      </div>
     </div>
-  </div>
 
-  {{if .Sections}}
-  <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
-  <div class="tri-crumb tri-crumb-hover">
-    {{if .Leaf}}<a href="{{.SectionURL}}">{{else}}<strong>{{end}}
-      <span class="material-icons tri-crumb-icon" aria-hidden="true">{{.SectionIcon}}</span> {{.SectionLabel}}
-    {{if .Leaf}}</a>{{else}}</strong>{{end}}
-    <span class="material-icons tri-crumb-caret" aria-hidden="true">expand_more</span>
-    <div class="tri-crumb-dropdown">
-      {{range .Sections}}
-      <a href="{{.URL}}" class="{{if .Active}}active{{end}}"><span class="material-icons" aria-hidden="true">{{.Icon}}</span> {{.Label}}</a>
-      {{end}}
+    {{if .Sections}}
+    <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
+    <div class="tri-crumb tri-crumb-hover">
+      {{if .Leaf}}<a href="{{.SectionURL}}">{{else}}<strong>{{end}}
+        <span class="material-icons tri-crumb-icon" aria-hidden="true">{{.SectionIcon}}</span> {{.SectionLabel}}
+      {{if .Leaf}}</a>{{else}}</strong>{{end}}
+      <span class="material-icons tri-crumb-caret" aria-hidden="true">expand_more</span>
+      <div class="tri-crumb-dropdown">
+        {{range .Sections}}
+        <a href="{{.URL}}" class="{{if .Active}}active{{end}}"><span class="material-icons" aria-hidden="true">{{.Icon}}</span> {{.Label}}</a>
+        {{end}}
+      </div>
     </div>
-  </div>
-  {{end}}
+    {{end}}
 
-  {{if .Leaf}}
-  <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
-  <strong>{{.Leaf}}</strong>
-  {{end}}
+    {{if .Leaf}}
+    <span class="material-icons tri-crumb-sep" aria-hidden="true">chevron_right</span>
+    <strong>{{.Leaf}}</strong>
+    {{end}}
+  </div>
 </div>
 {{end}}
 
@@ -88,7 +102,11 @@
   {{template "partial:breadcrumb" .}}
   <div class="tri-topbar-actions">
     <span class="tri-user-email">{{.User.Email}}</span>
-    <a class="tri-icon-btn" title="Déconnexion" href="/logout" aria-label="Déconnexion"><span class="material-icons" aria-hidden="true">logout</span></a>
+    {{/* On mobile, the logout icon is only shown on the dashboard: every
+         other page now has the back button as its sole mobile action, and
+         piling a second icon next to it crowds a screen that's already
+         tight -- logging out from a sub-page is one back-tap away. */}}
+    <a class="tri-icon-btn{{if not .IsHome}} tri-logout-hide-mobile{{end}}" title="Déconnexion" href="/logout" aria-label="Déconnexion"><span class="material-icons" aria-hidden="true">logout</span></a>
   </div>
 </div>
 {{end}}

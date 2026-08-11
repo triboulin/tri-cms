@@ -94,6 +94,21 @@ type PageData struct {
 	Content        any
 	Flash          string
 	FlashKind      string // "success" or "error"
+
+	// IsHome is true only for the dashboard ("/"): the top of the
+	// hierarchy, where there's nothing to go back to.
+	IsHome bool
+	// BackLabel/BackURL drive the mobile back button that replaces the
+	// full breadcrumb on narrow viewports: "go up one level" from wherever
+	// the page sits in the hierarchy already encoded by SectionLabel/
+	// SectionURL/Leaf above. Computed by a generic default in
+	// buildPageData; a handler may override both after the call when the
+	// generic level-2 section root isn't the right immediate parent (e.g.
+	// a content form's parent is its own schema's content list, not the
+	// generic Collections root -- see renderContentForm). Empty BackURL
+	// means no back button (only the dashboard).
+	BackLabel string
+	BackURL   string
 }
 
 // buildPageData assembles the common view-model for every HTMX page.
@@ -152,6 +167,32 @@ func (s *Server) buildPageData(ctx context.Context, user *storage.User, project 
 		pageTitle = leaf
 	}
 
+	// Mobile back button: go up one level from wherever this page sits.
+	// A leaf (level 3) always goes back to its section root (level 2).
+	// A bare section (level 2, no leaf) goes back to the project/admin
+	// home -- except when the section *is* that home already
+	// ("collections" for a project, "admin_projects" for Administration),
+	// in which case there's nothing left within this scope to go back to,
+	// so it goes up to the dashboard instead. The dashboard itself is the
+	// top of the hierarchy: no back button.
+	var backLabel, backURL string
+	switch {
+	case leaf != "":
+		backLabel, backURL = sectionLabel, sectionURL
+	case isAdmin:
+		if sectionKey == "admin_projects" {
+			backLabel, backURL = "Mes projets", "/"
+		} else {
+			backLabel, backURL = "Administration", "/admin/projects"
+		}
+	case project != nil:
+		if sectionKey == "collections" {
+			backLabel, backURL = "Mes projets", "/"
+		} else {
+			backLabel, backURL = project.Name, "/projects/"+project.ID
+		}
+	}
+
 	return &PageData{
 		User:           user,
 		CurrentProject: project,
@@ -167,6 +208,9 @@ func (s *Server) buildPageData(ctx context.Context, user *storage.User, project 
 		PageTitle:      pageTitle,
 		Sidebar:        sidebar,
 		Content:        content,
+		IsHome:         sectionKey == "",
+		BackLabel:      backLabel,
+		BackURL:        backURL,
 	}, nil
 }
 
