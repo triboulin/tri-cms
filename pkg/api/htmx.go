@@ -354,6 +354,13 @@ func (s *Server) loadProjectForHTMXAny(w http.ResponseWriter, r *http.Request) (
 
 // ---- Project home (Collections index) ----
 
+// collectionSchemaCard decorates a schema with its content count for the
+// Collections tile grid (see htmxCollections).
+type collectionSchemaCard struct {
+	*storage.Schema
+	Count int
+}
+
 func (s *Server) htmxCollections(w http.ResponseWriter, r *http.Request) {
 	user, project := s.loadProjectForHTMX(w, r, auth.SectionCollections)
 	if user == nil {
@@ -369,7 +376,18 @@ func (s *Server) htmxCollections(w http.ResponseWriter, r *http.Request) {
 		s.htmxServerError(w, r)
 		return
 	}
-	data, err := s.buildPageData(r.Context(), user, project, "collections", "", struct{ Schemas []*storage.Schema }{schemas})
+	counts, err := db.CountContentsBySchema(r.Context())
+	if err != nil {
+		s.htmxServerError(w, r)
+		return
+	}
+	cards := make([]collectionSchemaCard, len(schemas))
+	for i, sc := range schemas {
+		cards[i] = collectionSchemaCard{Schema: sc, Count: counts[sc.Slug]}
+	}
+	data, err := s.buildPageData(r.Context(), user, project, "collections", "", struct {
+		Schemas []collectionSchemaCard
+	}{cards})
 	if err != nil {
 		s.htmxServerError(w, r)
 		return

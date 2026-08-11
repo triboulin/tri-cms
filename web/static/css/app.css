@@ -191,6 +191,20 @@ body::before {
 .tri-project-card-new .tri-project-card-icon { background: transparent; }
 
 .tri-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+
+/* Collections index (schema list) -- fixed 3-column tile grid capped at
+   1200px wide, dropping to a single column under the standard 720px mobile
+   breakpoint below, unlike .tri-grid's auto-fill (which packs as many
+   columns as fit regardless of viewport). */
+.tri-collection-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 1200px; }
+.tri-collection-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 18px 16px;
+  border-radius: 10px; border: 1px solid var(--tri-border); background: var(--tri-card);
+  color: var(--tri-text); text-decoration: none;
+}
+.tri-collection-card:hover { border-color: var(--tri-accent); background: var(--tri-bg-subtle); }
+.tri-collection-card-name { font-weight: 600; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+.tri-collection-card-count { font-size: 0.82rem; color: var(--tri-muted); }
 table.tri-table { width: 100%; border-collapse: collapse; }
 table.tri-table th {
   text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--tri-border); font-size: 0.82rem;
@@ -503,6 +517,7 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   .tri-content { padding: 14px; }
   .tri-form-row { flex-direction: column; gap: 0; }
   .tri-media-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .tri-collection-grid { grid-template-columns: 1fr; }
   .tri-table-filter { max-width: none; }
   /* The email is redundant on mobile (Déconnexion is the only action that
      matters, and horizontal space is tight); still present in the DOM for

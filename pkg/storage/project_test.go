@@ -138,6 +138,44 @@ func TestProjectDB_Contents(t *testing.T) {
 	}
 }
 
+// TestProjectDB_CountContentsBySchema covers the Collections tile grid's
+// item-count query: schemas with contents are keyed with their count,
+// schemas with none are simply absent from the map (callers default to 0).
+func TestProjectDB_CountContentsBySchema(t *testing.T) {
+	ctx := context.Background()
+	db := newTestProjectDB(t)
+
+	for _, slug := range []string{"post", "author"} {
+		if err := db.CreateSchema(ctx, &Schema{Slug: slug, Name: slug, Definition: `{"fields":[]}`}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		if err := db.CreateContent(ctx, &Content{ID: uuid.NewString(), SchemaSlug: "post", Data: `{}`}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.CreateContent(ctx, &Content{ID: uuid.NewString(), SchemaSlug: "author", Data: `{}`}); err != nil {
+		t.Fatal(err)
+	}
+
+	counts, err := db.CountContentsBySchema(ctx)
+	if err != nil {
+		t.Fatalf("count by schema: %v", err)
+	}
+	if counts["post"] != 3 {
+		t.Fatalf("expected 3 for post, got %d", counts["post"])
+	}
+	if counts["author"] != 1 {
+		t.Fatalf("expected 1 for author, got %d", counts["author"])
+	}
+	// "tag" has no contents at all, and was never created as a schema either
+	// -- must simply be absent, not present with 0.
+	if _, ok := counts["tag"]; ok {
+		t.Fatalf("expected no entry for a schema with zero contents, got %d", counts["tag"])
+	}
+}
+
 func TestProjectDB_Medias(t *testing.T) {
 	ctx := context.Background()
 	db := newTestProjectDB(t)

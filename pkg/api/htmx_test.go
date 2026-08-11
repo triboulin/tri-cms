@@ -186,6 +186,52 @@ func TestHTMX_Logout(t *testing.T) {
 	}
 }
 
+// TestHTMX_Collections_TileGridShowsItemCounts covers the Collections page's
+// switch from a table to a tile grid: each schema renders as a
+// tri-collection-card link showing its name and content count, including
+// schemas with zero contents.
+func TestHTMX_Collections_TileGridShowsItemCounts(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	concepteur := e.createUser("tiles-c@x.com", false)
+	p := e.createProject("TileGrid")
+	e.setRole(concepteur.ID, p.ID, storage.RoleConcepteur)
+
+	setupSchema(t, e, p.ID, concepteur, "post", trischema.Definition{Fields: []trischema.Field{
+		{Key: "title", Type: trischema.Text, Cardinality: trischema.Simple},
+	}})
+	setupSchema(t, e, p.ID, concepteur, "author", trischema.Definition{Fields: []trischema.Field{
+		{Key: "name", Type: trischema.Text, Cardinality: trischema.Simple},
+	}})
+
+	for i := 0; i < 2; i++ {
+		rec := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/contents/post", concepteur, contentRequest{Data: map[string]any{"title": "hi"}})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create content: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+
+	rec := e.getHTML("/projects/"+p.ID, concepteur)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="tri-collection-grid"`) {
+		t.Fatalf("expected the tile grid container, got: %s", body)
+	}
+	if !strings.Contains(body, "2 éléments") {
+		t.Fatalf("expected post's tile to show 2 éléments, got: %s", body)
+	}
+	if !strings.Contains(body, "0 éléments") {
+		t.Fatalf("expected author's tile to show 0 éléments, got: %s", body)
+	}
+	if !strings.Contains(body, `href="/projects/`+p.ID+`/schemas/post/contents"`) {
+		t.Fatalf("expected the post tile to link to its content list, got: %s", body)
+	}
+	if strings.Contains(body, `<table class="tri-table">`) {
+		t.Fatalf("expected the old table markup to be gone, got: %s", body)
+	}
+}
+
 func TestHTMX_ProjectSections_RoleGating(t *testing.T) {
 	e := newHTMXTestEnv(t)
 	concepteur := e.createUser("hconcept@x.com", false)

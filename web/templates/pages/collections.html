@@ -19,26 +19,17 @@
           {{if .Sidebar.Conception}}Créez-en un depuis <a href="/projects/{{.CurrentProject.ID}}/conception">Conception</a>.{{end}}
         </p>
       {{else}}
-        <div class="tri-table-scroll">
-        <table class="tri-table">
-          <thead><tr><th>Nom</th><th>Slug</th><th>Créé le</th></tr></thead>
-          <tbody>
-          {{range .Content.Schemas}}
-            <tr class="tri-row-clickable" tabindex="0" role="button"
-                data-href="/projects/{{$.CurrentProject.ID}}/schemas/{{.Slug}}/contents"
-                title="Voir les contenus">
-              <td><span class="material-icons" style="font-size:16px;" aria-hidden="true">description</span> {{.Name}}</td>
-              <td><code>{{.Slug}}</code></td>
-              <td>{{.CreatedAt.Format "2006-01-02"}}</td>
-            </tr>
-          {{end}}
-          </tbody>
-        </table>
+        <div class="tri-collection-grid">
+        {{range .Content.Schemas}}
+          <a class="tri-collection-card" href="/projects/{{$.CurrentProject.ID}}/schemas/{{.Slug}}/contents" title="Voir les contenus">
+            <span class="tri-collection-card-name"><span class="material-icons" aria-hidden="true">description</span> {{.Name}}</span>
+            <span class="tri-collection-card-count">{{.Count}} élément{{if ne .Count 1}}s{{end}}</span>
+          </a>
+        {{end}}
         </div>
       {{end}}
     </div>
   </div>
-<script src="/static/js/row-link.js"></script>
 </body>
 </html>
 {{end}}

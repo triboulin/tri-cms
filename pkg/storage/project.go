@@ -233,6 +233,29 @@ func (p *ProjectDB) ListContents(ctx context.Context, schemaSlug string) ([]*Con
 	return out, rows.Err()
 }
 
+// CountContentsBySchema returns the number of contents per schema slug, for
+// every schema that has at least one -- used by the Collections tile grid
+// to show an item count without loading every content row (see
+// htmxCollections). Schemas with zero contents simply aren't keyed in the
+// returned map; callers should default to 0.
+func (p *ProjectDB) CountContentsBySchema(ctx context.Context) (map[string]int, error) {
+	rows, err := p.db.QueryContext(ctx, `SELECT schema_slug, COUNT(*) FROM _contents GROUP BY schema_slug`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var slug string
+		var n int
+		if err := rows.Scan(&slug, &n); err != nil {
+			return nil, err
+		}
+		out[slug] = n
+	}
+	return out, rows.Err()
+}
+
 // CountContentsReferencing counts contents whose data contains the given id
 // as the value of a Reference-type field (naive substring pre-check; final
 // authority is pkg/schema which knows field types).
