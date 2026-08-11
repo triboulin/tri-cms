@@ -40,7 +40,9 @@
               {{range .Cells}}
               <td>
                 {{if .MediaURLs}}
-                  {{range .MediaURLs}}<img src="{{.}}" alt="" class="tri-cell-thumb" loading="lazy">{{end}}
+                  <div class="tri-cell-thumb-grid">
+                    {{range .MediaURLs}}<img src="{{.}}" alt="" class="tri-cell-thumb" loading="lazy">{{end}}
+                  </div>
                 {{else}}
                   {{.Text}}
                 {{end}}

@@ -146,12 +146,17 @@ table.tri-table td {
 table.tri-table tbody tr:hover { background: var(--tri-bg-subtle); }
 table.tri-table td.tri-actions { text-align: right; white-space: nowrap; }
 /* Media-field cells in the content list: the picture itself, not its
-   filename/id -- a thumbnail scans at a glance, a filename doesn't. */
+   filename/id -- a thumbnail scans at a glance, a filename doesn't. A
+   Collection-cardinality field can carry several images per row, laid out
+   4-wide so the cell grows downward instead of stretching the row's width
+   out to however many images happen to be attached. */
+.tri-cell-thumb-grid {
+  display: grid; grid-template-columns: repeat(4, 40px); gap: 4px;
+}
 .tri-cell-thumb {
   width: 40px; height: 40px; object-fit: cover; border-radius: 4px;
-  border: 1px solid var(--tri-border); vertical-align: middle;
+  border: 1px solid var(--tri-border);
 }
-.tri-cell-thumb + .tri-cell-thumb { margin-left: 4px; }
 .tri-badge {
   display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
   background: var(--tri-accent); color: #fff;
