@@ -281,6 +281,68 @@ func TestSystemDB_Webhooks(t *testing.T) {
 	}
 }
 
+// TestSystemDB_MigrateWebhookEventNames is a regression test for the
+// content.* event collapse (see pkg/webhooks.EventContentUpdate's doc
+// comment): a webhook provisioned back when granular events existed --
+// e.g. neon-blog's, created with events: ["content.publish",
+// "content.unpublish"] -- must have those rewritten to content.update on
+// startup, or it would silently stop matching anything once the dispatch
+// side only ever sends content.update.
+func TestSystemDB_MigrateWebhookEventNames(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	proj := &Project{ID: "proj_mig", Name: "Migrate", FolderPath: "./data/projects/proj_mig"}
+	if err := db.CreateProject(ctx, proj); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate pre-existing rows written before the collapse, bypassing
+	// CreateWebhook (which would encode today's Go constants, not the old
+	// on-disk values this migration exists to fix).
+	rawRows := []struct {
+		id     string
+		events string
+	}{
+		{uuid.NewString(), `["content.publish","content.unpublish"]`},
+		{uuid.NewString(), `["content.create","content.update"]`},
+		{uuid.NewString(), `["content.delete"]`},
+		{uuid.NewString(), `["content.update","media.create"]`},
+	}
+	for _, r := range rawRows {
+		if _, err := db.db.ExecContext(ctx,
+			`INSERT INTO webhooks (id, project_id, url, secret, events) VALUES (?, ?, ?, ?, ?)`,
+			r.id, proj.ID, "https://example.com/hook", "s", r.events); err != nil {
+			t.Fatalf("seed raw webhook row: %v", err)
+		}
+	}
+
+	if err := migrateWebhookEventNames(db.db); err != nil {
+		t.Fatalf("migrateWebhookEventNames: %v", err)
+	}
+
+	for _, r := range rawRows {
+		got, err := db.GetWebhook(ctx, r.id)
+		if err != nil {
+			t.Fatalf("get webhook %s: %v", r.id, err)
+		}
+		seen := make(map[string]bool)
+		for _, ev := range got.Events {
+			if ev != "content.update" && ev != "media.create" && ev != "media.delete" {
+				t.Fatalf("webhook %s still has stale event %q after migration: %v", r.id, ev, got.Events)
+			}
+			if seen[ev] {
+				t.Fatalf("webhook %s has duplicate event %q after migration: %v", r.id, ev, got.Events)
+			}
+			seen[ev] = true
+		}
+	}
+
+	// Running the migration again must be a no-op (idempotent).
+	if err := migrateWebhookEventNames(db.db); err != nil {
+		t.Fatalf("second migrateWebhookEventNames run: %v", err)
+	}
+}
+
 func TestSystemDB_WebhookDeliveries(t *testing.T) {
 	ctx := context.Background()
 	db := newTestSystemDB(t)

@@ -16,8 +16,7 @@ import (
 // the create/edit form's checkbox list.
 func availableWebhookEvents() []string {
 	return []string{
-		webhooks.EventContentCreate, webhooks.EventContentUpdate, webhooks.EventContentDelete,
-		webhooks.EventContentPublish, webhooks.EventContentUnpublish,
+		webhooks.EventContentUpdate,
 		webhooks.EventMediaCreate, webhooks.EventMediaDelete,
 	}
 }

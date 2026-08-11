@@ -174,7 +174,7 @@ func TestWebhookDispatch_FiresOnContentCreate(t *testing.T) {
 	defer srv.Close()
 
 	rec := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
-		URL: srv.URL, Secret: "s", Events: []string{"content.create"},
+		URL: srv.URL, Secret: "s", Events: []string{"content.update"},
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rec.Code)
@@ -187,21 +187,20 @@ func TestWebhookDispatch_FiresOnContentCreate(t *testing.T) {
 
 	select {
 	case ev := <-received:
-		if ev != "content.create" {
-			t.Fatalf("expected content.create event, got %q", ev)
+		if ev != "content.update" {
+			t.Fatalf("expected content.update event, got %q", ev)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for webhook delivery")
 	}
 }
 
-// TestWebhookDispatch_FiresOnContentPublish is a regression test: before
-// this fix, content.publish/content.unpublish were declared in
-// pkg/webhooks.Event* but never actually dispatched anywhere, so a webhook
-// subscribed only to them (the default tricms-setup/tricms_provision.py sets
-// up for github_dispatch webhooks) never received a single delivery no
-// matter how much content got created, edited, or published.
-func TestWebhookDispatch_FiresOnContentPublish(t *testing.T) {
+// TestWebhookDispatch_FiresOnEveryContentMutation is a regression test for
+// the unified event model: a webhook subscribed to content.update must fire
+// for every kind of content CRUD mutation -- draft creation, publish, and
+// delete -- since there is no longer a granular event to pick between (see
+// pkg/webhooks.EventContentUpdate's doc comment).
+func TestWebhookDispatch_FiresOnEveryContentMutation(t *testing.T) {
 	e := newTestEnv(t)
 	concepteur := e.createUser("wp1@x.com", false)
 	admin := e.createUser("wp2@x.com", true)
@@ -219,13 +218,14 @@ func TestWebhookDispatch_FiresOnContentPublish(t *testing.T) {
 	defer srv.Close()
 
 	rec := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
-		URL: srv.URL, Secret: "s", Events: []string{"content.publish"},
+		URL: srv.URL, Secret: "s", Events: []string{"content.update"},
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rec.Code)
 	}
 
-	// Created as a draft: must NOT fire content.publish.
+	// Created as a draft: must still fire content.update -- creation is a
+	// CRUD mutation like any other under the unified model.
 	rec = e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/contents/note", concepteur, contentRequest{
 		Data: map[string]any{"body": "hi"}, Status: storage.StatusDraft,
 	})
@@ -236,11 +236,14 @@ func TestWebhookDispatch_FiresOnContentPublish(t *testing.T) {
 
 	select {
 	case ev := <-received:
-		t.Fatalf("expected no delivery for a draft creation, got %q", ev)
-	case <-time.After(200 * time.Millisecond):
+		if ev != "content.update" {
+			t.Fatalf("expected content.update event on draft creation, got %q", ev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for content.update delivery on creation")
 	}
 
-	// Publishing it must fire content.publish.
+	// Publishing it must also fire content.update.
 	rec = e.request(http.MethodPut, "/api/v1/projects/"+p.ID+"/contents/note/"+created.ID, concepteur, contentRequest{
 		Data: map[string]any{"body": "hi"}, Status: storage.StatusPublished,
 	})
@@ -250,11 +253,26 @@ func TestWebhookDispatch_FiresOnContentPublish(t *testing.T) {
 
 	select {
 	case ev := <-received:
-		if ev != "content.publish" {
-			t.Fatalf("expected content.publish event, got %q", ev)
+		if ev != "content.update" {
+			t.Fatalf("expected content.update event on publish, got %q", ev)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for content.publish delivery")
+		t.Fatal("timed out waiting for content.update delivery on publish")
+	}
+
+	// Deleting it must also fire content.update.
+	rec = e.request(http.MethodDelete, "/api/v1/projects/"+p.ID+"/contents/note/"+created.ID, concepteur, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	select {
+	case ev := <-received:
+		if ev != "content.update" {
+			t.Fatalf("expected content.update event on delete, got %q", ev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for content.update delivery on delete")
 	}
 }
 

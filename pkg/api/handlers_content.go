@@ -203,8 +203,7 @@ func (s *Server) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.create", map[string]string{"schema": schemaSlug, "id": c.ID})
-	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentCreate, map[string]string{"id": c.ID, "schema": schemaSlug})
-	s.dispatchContentStatusEvent(r.Context(), project.ID, schemaSlug, c.ID, storage.StatusDraft, c.Status)
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": c.ID, "schema": schemaSlug})
 
 	cr, _ := toContentResponse(c)
 	writeJSON(w, http.StatusCreated, cr)
@@ -267,7 +266,6 @@ func (s *Server) handleUpdateContent(w http.ResponseWriter, r *http.Request) {
 		status = req.Status
 	}
 
-	previousStatus := existing.Status
 	existing.Data = string(dataJSON)
 	existing.Status = status
 	if err := db.UpdateContent(r.Context(), existing); err != nil {
@@ -277,7 +275,6 @@ func (s *Server) handleUpdateContent(w http.ResponseWriter, r *http.Request) {
 
 	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.update", map[string]string{"schema": schemaSlug, "id": contentID})
 	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": schemaSlug})
-	s.dispatchContentStatusEvent(r.Context(), project.ID, schemaSlug, contentID, previousStatus, status)
 
 	cr, _ := toContentResponse(existing)
 	writeJSON(w, http.StatusOK, cr)
@@ -317,28 +314,8 @@ func (s *Server) handleDeleteContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = s.System.LogAction(r.Context(), ActorLogID(r.Context()), project.ID, "content.delete", map[string]string{"schema": schemaSlug, "id": contentID})
-	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentDelete, map[string]string{"id": contentID, "schema": schemaSlug})
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": schemaSlug})
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// dispatchContentStatusEvent fires content.publish/content.unpublish when a
-// content's status actually crosses the published boundary, on top of the
-// content.create/update event the caller already dispatched. Those two
-// events exist in pkg/webhooks.Event* and are exactly what
-// tricms-setup/tricms_provision.py subscribes github_dispatch webhooks to by
-// default (rebuild-on-publish) -- without this, a project provisioned that
-// way never receives a single delivery, no matter how much content gets
-// created/edited, because nothing ever fired content.publish/unpublish.
-// Returns whether a delivery was actually triggered (see dispatchWebhooksAsync).
-func (s *Server) dispatchContentStatusEvent(ctx context.Context, projectID, schemaSlug, contentID string, oldStatus, newStatus storage.ContentStatus) bool {
-	payload := map[string]string{"id": contentID, "schema": schemaSlug}
-	switch {
-	case newStatus == storage.StatusPublished && oldStatus != storage.StatusPublished:
-		return s.dispatchWebhooksAsync(ctx, projectID, webhooks.EventContentPublish, payload)
-	case oldStatus == storage.StatusPublished && newStatus != storage.StatusPublished:
-		return s.dispatchWebhooksAsync(ctx, projectID, webhooks.EventContentUnpublish, payload)
-	}
-	return false
 }
 
 // dispatchWebhooksAsync fires every webhook subscribed to `event` for a

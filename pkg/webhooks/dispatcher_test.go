@@ -34,7 +34,7 @@ func TestDispatcher_SuccessFirstAttempt(t *testing.T) {
 		if !VerifySignature("s3cret", body, sig) {
 			t.Errorf("signature verification failed")
 		}
-		if r.Header.Get("X-TriCMS-Event") != EventContentCreate {
+		if r.Header.Get("X-TriCMS-Event") != EventContentUpdate {
 			t.Errorf("expected event header, got %q", r.Header.Get("X-TriCMS-Event"))
 		}
 		w.WriteHeader(http.StatusOK)
@@ -43,7 +43,7 @@ func TestDispatcher_SuccessFirstAttempt(t *testing.T) {
 
 	d := testDispatcher()
 	wh := &storage.Webhook{URL: srv.URL, Secret: "s3cret", ProjectID: "proj_1"}
-	res, err := d.Send(context.Background(), wh, EventContentCreate, map[string]string{"id": "c1"})
+	res, err := d.Send(context.Background(), wh, EventContentUpdate, map[string]string{"id": "c1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestDispatcher_PermanentFailureOn4xxNoRetry(t *testing.T) {
 
 	d := testDispatcher()
 	wh := &storage.Webhook{URL: srv.URL, Secret: "s", ProjectID: "p"}
-	res, err := d.Send(context.Background(), wh, EventContentDelete, nil)
+	res, err := d.Send(context.Background(), wh, EventContentUpdate, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestDispatcher_ExhaustsRetriesOnPersistent5xx(t *testing.T) {
 
 	d := testDispatcher()
 	wh := &storage.Webhook{URL: srv.URL, Secret: "s", ProjectID: "p"}
-	res, err := d.Send(context.Background(), wh, EventContentCreate, nil)
+	res, err := d.Send(context.Background(), wh, EventContentUpdate, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestDispatcher_NetworkErrorRetriesThenGivesUp(t *testing.T) {
 	srv.Close() // server is now unreachable
 
 	wh := &storage.Webhook{URL: url, Secret: "s", ProjectID: "p"}
-	res, err := d.Send(context.Background(), wh, EventContentDelete, nil)
+	res, err := d.Send(context.Background(), wh, EventContentUpdate, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestDispatcher_NetworkErrorRetriesThenGivesUp(t *testing.T) {
 func TestDispatcher_ContextCancelledBuildingRequestFails(t *testing.T) {
 	d := testDispatcher()
 	wh := &storage.Webhook{URL: "://bad-url", Secret: "s", ProjectID: "p"}
-	if _, err := d.Send(context.Background(), wh, EventContentCreate, nil); err == nil {
+	if _, err := d.Send(context.Background(), wh, EventContentUpdate, nil); err == nil {
 		t.Fatal("expected error building request for malformed URL")
 	}
 }
@@ -179,7 +179,7 @@ func TestDispatcher_DefaultAttemptsWhenZero(t *testing.T) {
 	}))
 	defer srv.Close()
 	wh := &storage.Webhook{URL: srv.URL, Secret: "s", ProjectID: "p"}
-	res, err := d.Send(context.Background(), wh, EventContentCreate, nil)
+	res, err := d.Send(context.Background(), wh, EventContentUpdate, nil)
 	if err != nil || !res.Success || res.Attempts != 1 {
 		t.Fatalf("expected 1 attempt with default, got %+v (err=%v)", res, err)
 	}
@@ -248,7 +248,7 @@ func TestDispatcher_GitHubDispatch_Success(t *testing.T) {
 		Kind:   KindGitHubDispatch,
 		Config: `{"owner":"louis","repo":"site","token":"enc:ghp_abc123"}`,
 	}
-	res, err := d.Send(context.Background(), wh, EventContentPublish, nil)
+	res, err := d.Send(context.Background(), wh, EventContentUpdate, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestDispatcher_GitHubDispatch_Success(t *testing.T) {
 	if gotAccept != "application/vnd.github+json" {
 		t.Fatalf("unexpected Accept header: %q", gotAccept)
 	}
-	if gotBody != `{"event_type":"content.publish"}` {
+	if gotBody != `{"event_type":"content.update"}` {
 		t.Fatalf("unexpected dispatch body: %q", gotBody)
 	}
 }
@@ -286,7 +286,7 @@ func TestDispatcher_GitHubDispatch_RetriesOn5xx(t *testing.T) {
 	d.Decryptor = stubDecryptor{}
 
 	wh := &storage.Webhook{Kind: KindGitHubDispatch, Config: `{"owner":"o","repo":"r","token":"t"}`}
-	res, err := d.Send(context.Background(), wh, EventContentPublish, nil)
+	res, err := d.Send(context.Background(), wh, EventContentUpdate, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -298,7 +298,7 @@ func TestDispatcher_GitHubDispatch_RetriesOn5xx(t *testing.T) {
 func TestDispatcher_GitHubDispatch_MissingDecryptor(t *testing.T) {
 	d := testDispatcher()
 	wh := &storage.Webhook{Kind: KindGitHubDispatch, Config: `{"owner":"o","repo":"r","token":"t"}`}
-	if _, err := d.Send(context.Background(), wh, EventContentPublish, nil); err == nil {
+	if _, err := d.Send(context.Background(), wh, EventContentUpdate, nil); err == nil {
 		t.Fatal("expected error when no Decryptor is configured")
 	}
 }
@@ -307,7 +307,7 @@ func TestDispatcher_GitHubDispatch_DecryptFailure(t *testing.T) {
 	d := testDispatcher()
 	d.Decryptor = stubDecryptor{err: errors.New("bad key")}
 	wh := &storage.Webhook{Kind: KindGitHubDispatch, Config: `{"owner":"o","repo":"r","token":"t"}`}
-	if _, err := d.Send(context.Background(), wh, EventContentPublish, nil); err == nil {
+	if _, err := d.Send(context.Background(), wh, EventContentUpdate, nil); err == nil {
 		t.Fatal("expected error when decryption fails")
 	}
 }
@@ -316,7 +316,7 @@ func TestDispatcher_GitHubDispatch_MalformedConfig(t *testing.T) {
 	d := testDispatcher()
 	d.Decryptor = stubDecryptor{}
 	wh := &storage.Webhook{Kind: KindGitHubDispatch, Config: `not-json`}
-	if _, err := d.Send(context.Background(), wh, EventContentPublish, nil); err == nil {
+	if _, err := d.Send(context.Background(), wh, EventContentUpdate, nil); err == nil {
 		t.Fatal("expected error for malformed config JSON")
 	}
 }
@@ -331,7 +331,7 @@ func TestDispatcher_GitHubDispatch_MissingFields(t *testing.T) {
 	}
 	for _, cfg := range cases {
 		wh := &storage.Webhook{Kind: KindGitHubDispatch, Config: cfg}
-		if _, err := d.Send(context.Background(), wh, EventContentPublish, nil); err == nil {
+		if _, err := d.Send(context.Background(), wh, EventContentUpdate, nil); err == nil {
 			t.Errorf("config %q: expected error for missing required field", cfg)
 		}
 	}
@@ -346,7 +346,7 @@ func TestDispatcher_GitHubDispatch_DefaultsBaseURL(t *testing.T) {
 	wh := &storage.Webhook{Kind: KindGitHubDispatch, Config: `{"owner":"o","repo":"r","token":"t"}`}
 	// Real api.github.com may or may not be reachable in this sandbox; we
 	// only assert this doesn't panic/error on request *construction*.
-	if _, err := d.Send(context.Background(), wh, EventContentPublish, nil); err != nil {
+	if _, err := d.Send(context.Background(), wh, EventContentUpdate, nil); err != nil {
 		t.Fatalf("unexpected request-construction error: %v", err)
 	}
 }

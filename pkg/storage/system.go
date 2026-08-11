@@ -122,6 +122,10 @@ func OpenSystemDB(dsn string) (*SystemDB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate system db: %w", err)
 	}
+	if err := migrateWebhookEventNames(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate system db: %w", err)
+	}
 	return &SystemDB{db: db}, nil
 }
 
@@ -184,6 +188,72 @@ func migrateWebhookDeliveryColumns(db *sql.DB) error {
 			if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
 				continue
 			}
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateWebhookEventNames rewrites pre-existing webhooks.events rows that
+// reference the granular content events (content.create/delete/publish/
+// unpublish) from before they were collapsed into the single content.update
+// event (see pkg/webhooks.EventContentUpdate's doc comment). Without this, a
+// webhook provisioned back when granular events existed -- e.g. one created
+// with events: ["content.publish", "content.unpublish"] -- would silently
+// stop matching anything once the dispatch side only ever sends
+// content.update, and would never fire again. Idempotent: rows already
+// storing only content.update/media.* are left untouched.
+func migrateWebhookEventNames(db *sql.DB) error {
+	rows, err := db.Query(`SELECT id, events FROM webhooks`)
+	if err != nil {
+		return err
+	}
+	type rewrite struct {
+		id     string
+		events string
+	}
+	var pending []rewrite
+	for rows.Next() {
+		var id, events string
+		if err := rows.Scan(&id, &events); err != nil {
+			rows.Close()
+			return err
+		}
+		var parsed []string
+		if err := json.Unmarshal([]byte(events), &parsed); err != nil {
+			continue
+		}
+		seen := make(map[string]bool, len(parsed))
+		var rewritten []string
+		changed := false
+		for _, ev := range parsed {
+			switch ev {
+			case "content.create", "content.delete", "content.publish", "content.unpublish":
+				ev = "content.update"
+				changed = true
+			}
+			if !seen[ev] {
+				seen[ev] = true
+				rewritten = append(rewritten, ev)
+			} else {
+				changed = true
+			}
+		}
+		if changed {
+			encoded, err := json.Marshal(rewritten)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			pending = append(pending, rewrite{id: id, events: string(encoded)})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	for _, r := range pending {
+		if _, err := db.Exec(`UPDATE webhooks SET events = ? WHERE id = ?`, r.events, r.id); err != nil {
 			return err
 		}
 	}
