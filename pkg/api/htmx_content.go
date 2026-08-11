@@ -417,15 +417,46 @@ func (s *Server) htmxContentList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reference fields store the target content's id, not anything a human
+	// can read -- resolve each distinct target schema's ids to labels once
+	// (referenceLabel, the same helper the edit form's picker already uses)
+	// rather than per row/field.
+	referenceLabelCache := map[string]map[string]string{}
+	referenceLabels := func(targetSchema string) (map[string]string, error) {
+		if labels, ok := referenceLabelCache[targetSchema]; ok {
+			return labels, nil
+		}
+		targets, err := db.ListContents(r.Context(), targetSchema)
+		if err != nil {
+			return nil, err
+		}
+		labels := make(map[string]string, len(targets))
+		for _, t := range targets {
+			var tdata map[string]any
+			_ = json.Unmarshal([]byte(t.Data), &tdata)
+			labels[t.ID] = referenceLabel(tdata, t.ID)
+		}
+		referenceLabelCache[targetSchema] = labels
+		return labels, nil
+	}
+
 	rows := make([]contentRowVM, 0, len(items))
 	for _, c := range items {
 		var data map[string]any
 		_ = json.Unmarshal([]byte(c.Data), &data)
 		cells := make([]contentCellVM, 0, len(def.Fields))
 		for _, f := range def.Fields {
-			if f.Type == trischema.Media {
+			switch f.Type {
+			case trischema.Media:
 				cells = append(cells, contentCellVM{MediaURLs: mediaThumbURLs(project.ID, data[f.Key])})
-			} else {
+			case trischema.Reference:
+				labels, err := referenceLabels(f.TargetSchema)
+				if err != nil {
+					s.htmxServerError(w, r)
+					return
+				}
+				cells = append(cells, contentCellVM{Text: formatCell(resolveReferenceLabels(data[f.Key], labels))})
+			default:
 				cells = append(cells, contentCellVM{Text: formatCell(data[f.Key])})
 			}
 		}
@@ -447,6 +478,37 @@ func (s *Server) htmxContentList(w http.ResponseWriter, r *http.Request) {
 	}
 	applyFlash(r, data)
 	s.render(w, "page:content_list", data)
+}
+
+// resolveReferenceLabels swaps a Reference field's raw stored id(s) for the
+// target content's display label, using the same id->label map
+// referenceLabels builds per target schema. Shape-preserving (string stays
+// a string, []any stays a []any) so the result can go straight through
+// formatCell like any other field's value; ids with no matching label
+// (e.g. a since-deleted target) fall back to the raw id rather than
+// disappearing silently.
+func resolveReferenceLabels(raw any, labels map[string]string) any {
+	switch t := raw.(type) {
+	case string:
+		if label, ok := labels[t]; ok {
+			return label
+		}
+		return t
+	case []any:
+		resolved := make([]any, 0, len(t))
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				if label, ok := labels[s]; ok {
+					resolved = append(resolved, label)
+					continue
+				}
+			}
+			resolved = append(resolved, item)
+		}
+		return resolved
+	default:
+		return raw
+	}
 }
 
 // cellTextLimit caps how much of a cell's value the content-list table
