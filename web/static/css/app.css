@@ -532,6 +532,5 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   .tri-card { margin: 4px; padding: 10px; }
   table.tri-table th, table.tri-table td { padding: 6px 8px; }
   .tri-btn { padding: 7px 10px; font-size: 0.85rem; }
-  .tri-section-title { flex-direction: column; align-items: flex-start; gap: 8px; }
   .tri-media-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
