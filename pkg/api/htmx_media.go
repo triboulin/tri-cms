@@ -138,16 +138,15 @@ func (s *Server) htmxMediaFile(w http.ResponseWriter, r *http.Request) {
 // Shared by htmxUploadMedia (redirect-based, the standalone Médias page)
 // and htmxUploadMediaForPicker (fragment response, so the media picker
 // modal can add a file without navigating away from whatever form it's
-// embedded in). deploying reports whether that upload also triggered a
-// webhook delivery, for callers that surface it in a flash message.
-func (s *Server) saveUploadedMedia(w http.ResponseWriter, r *http.Request, project *storage.Project) (m *storage.Media, deploying bool, err error) {
+// embedded in).
+func (s *Server) saveUploadedMedia(w http.ResponseWriter, r *http.Request, project *storage.Project) (m *storage.Media, err error) {
 	r.Body = http.MaxBytesReader(w, r.Body, s.MaxUploadSize)
 	if err := r.ParseMultipartForm(multipartMemoryThreshold); err != nil {
-		return nil, false, fmt.Errorf("Fichier trop volumineux ou envoi invalide.")
+		return nil, fmt.Errorf("Fichier trop volumineux ou envoi invalide.")
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		return nil, false, fmt.Errorf("Sélectionnez un fichier à téléverser.")
+		return nil, fmt.Errorf("Sélectionnez un fichier à téléverser.")
 	}
 	defer file.Close()
 
@@ -157,13 +156,13 @@ func (s *Server) saveUploadedMedia(w http.ResponseWriter, r *http.Request, proje
 
 	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
 	if err != nil {
-		return nil, false, fmt.Errorf("Impossible d'enregistrer le fichier.")
+		return nil, fmt.Errorf("Impossible d'enregistrer le fichier.")
 	}
 	written, err := io.Copy(out, file)
 	closeErr := out.Close()
 	if err != nil || closeErr != nil {
 		os.Remove(destPath)
-		return nil, false, fmt.Errorf("Impossible d'enregistrer le fichier.")
+		return nil, fmt.Errorf("Impossible d'enregistrer le fichier.")
 	}
 
 	mimeType := header.Header.Get("Content-Type")
@@ -174,15 +173,15 @@ func (s *Server) saveUploadedMedia(w http.ResponseWriter, r *http.Request, proje
 	db, err := s.projectDB(project.ID)
 	if err != nil {
 		os.Remove(destPath)
-		return nil, false, fmt.Errorf("Erreur serveur.")
+		return nil, fmt.Errorf("Erreur serveur.")
 	}
 	m = &storage.Media{ID: id, Filename: header.Filename, MimeType: mimeType, Size: written, FilePath: storedName}
 	if err := db.CreateMedia(r.Context(), m); err != nil {
 		os.Remove(destPath)
-		return nil, false, fmt.Errorf("Impossible d'enregistrer le média : %w", err)
+		return nil, fmt.Errorf("Impossible d'enregistrer le média : %w", err)
 	}
-	deploying = s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaCreate, map[string]string{"id": m.ID, "filename": m.Filename})
-	return m, deploying, nil
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaCreate, map[string]string{"id": m.ID, "filename": m.Filename})
+	return m, nil
 }
 
 func (s *Server) htmxUploadMedia(w http.ResponseWriter, r *http.Request) {
@@ -192,12 +191,12 @@ func (s *Server) htmxUploadMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	back := "/projects/" + project.ID + "/medias"
 
-	m, deploying, err := s.saveUploadedMedia(w, r, project)
+	m, err := s.saveUploadedMedia(w, r, project)
 	if err != nil {
 		redirectWithFlash(w, r, back, err.Error(), "error")
 		return
 	}
-	redirectWithFlash(w, r, back, saveFlashMessage("Média « "+m.Filename+" » téléversé.", deploying), "success")
+	redirectWithFlash(w, r, back, "Média « "+m.Filename+" » téléversé.", "success")
 }
 
 // htmxUploadMediaForPicker uploads a file the same way htmxUploadMedia does,
@@ -211,7 +210,7 @@ func (s *Server) htmxUploadMediaForPicker(w http.ResponseWriter, r *http.Request
 	if user == nil {
 		return
 	}
-	m, _, err := s.saveUploadedMedia(w, r, project)
+	m, err := s.saveUploadedMedia(w, r, project)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -253,6 +252,6 @@ func (s *Server) htmxDeleteMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = os.Remove(filepath.Join(s.Manager.ProjectMediaDir(project.ID), m.FilePath))
-	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaDelete, map[string]string{"id": mediaID, "filename": m.Filename})
-	redirectWithFlash(w, r, back, saveFlashMessage("Média « "+m.Filename+" » supprimé.", deploying), "success")
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaDelete, map[string]string{"id": mediaID, "filename": m.Filename})
+	redirectWithFlash(w, r, back, "Média « "+m.Filename+" » supprimé.", "success")
 }

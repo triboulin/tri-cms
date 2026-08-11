@@ -263,18 +263,6 @@ func applyFlash(r *http.Request, data *PageData) {
 	}
 }
 
-// saveFlashMessage appends a "redéploiement en cours" notice to a save
-// confirmation when dispatchWebhooksAsync (or dispatchContentStatusEvent)
-// reported that a delivery was actually triggered -- so the message reflects
-// something real happening rather than a generic "saved" that gives no clue
-// whether the change will ever reach the published site.
-func saveFlashMessage(base string, deploying bool) string {
-	if deploying {
-		return base + " Redéploiement en cours…"
-	}
-	return base
-}
-
 // redirectWithFlash redirects to path (typically the referring list page)
 // carrying a short human-readable status message, per the standard
 // Post/Redirect/Get pattern used by every mutating HTMX form handler.

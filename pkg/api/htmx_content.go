@@ -685,9 +685,9 @@ func (s *Server) htmxCreateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.create", map[string]string{"schema": slug, "id": c.ID})
-	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": c.ID, "schema": slug})
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": c.ID, "schema": slug})
 
-	redirectWithFlash(w, r, listPath, saveFlashMessage("Contenu créé.", deploying), "success")
+	redirectWithFlash(w, r, listPath, "Contenu créé.", "success")
 }
 
 func (s *Server) htmxUpdateContent(w http.ResponseWriter, r *http.Request) {
@@ -760,9 +760,9 @@ func (s *Server) htmxUpdateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.update", map[string]string{"schema": slug, "id": contentID})
-	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
 
-	redirectWithFlash(w, r, listPath, saveFlashMessage("Contenu mis à jour.", deploying), "success")
+	redirectWithFlash(w, r, listPath, "Contenu mis à jour.", "success")
 }
 
 func (s *Server) htmxDeleteContent(w http.ResponseWriter, r *http.Request) {
@@ -799,8 +799,8 @@ func (s *Server) htmxDeleteContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.delete", map[string]string{"schema": slug, "id": contentID})
-	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
-	redirectWithFlash(w, r, listPath, saveFlashMessage("Contenu supprimé.", deploying), "success")
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
+	redirectWithFlash(w, r, listPath, "Contenu supprimé.", "success")
 }
 
 func (s *Server) htmxToggleContentStatus(w http.ResponseWriter, r *http.Request) {
@@ -832,8 +832,8 @@ func (s *Server) htmxToggleContentStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.update", map[string]string{"schema": slug, "id": contentID, "status": string(c.Status)})
-	deploying := s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
-	redirectWithFlash(w, r, listPath, saveFlashMessage("Statut mis à jour : "+string(c.Status)+".", deploying), "success")
+	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
+	redirectWithFlash(w, r, listPath, "Statut mis à jour : "+string(c.Status)+".", "success")
 }
 
 func jsonTimestamp() string {

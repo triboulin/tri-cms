@@ -109,8 +109,10 @@ func TestHTMX_DeployTile_EndToEnd(t *testing.T) {
 	if !strings.Contains(body, "Déploiement réussi") || !strings.Contains(body, "tri-deploy-tile-success") {
 		t.Fatalf("expected a success tile, got: %s", body)
 	}
-	if !strings.Contains(body, `href="https://github.com/louis/mon-site/actions/runs/1"`) {
-		t.Fatalf("expected a link to the run, got: %s", body)
+	// The site-wide tile is a lightweight glanceable status, no GitHub link --
+	// the full run link still lives in the Webhooks page's delivery history.
+	if strings.Contains(body, "href=") {
+		t.Fatalf("expected no run link in the site-wide tile, got: %s", body)
 	}
 
 	// Backdate the resolution past the 30s grace window directly via
