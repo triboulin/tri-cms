@@ -37,7 +37,15 @@
                 data-edit-url="/projects/{{$.CurrentProject.ID}}/schemas/{{$.Content.Schema.Slug}}/contents/{{.ID}}/edit"
                 data-delete-url="/projects/{{$.CurrentProject.ID}}/schemas/{{$.Content.Schema.Slug}}/contents/{{.ID}}/delete"
                 title="Cliquer pour modifier">
-              {{range .Cells}}<td>{{.}}</td>{{end}}
+              {{range .Cells}}
+              <td>
+                {{if .MediaURLs}}
+                  {{range .MediaURLs}}<img src="{{.}}" alt="" class="tri-cell-thumb" loading="lazy">{{end}}
+                {{else}}
+                  {{.Text}}
+                {{end}}
+              </td>
+              {{end}}
               <td>
                 {{if eq .Status "published"}}
                   <span class="tri-badge">publié</span>

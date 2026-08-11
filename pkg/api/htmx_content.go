@@ -357,8 +357,42 @@ type contentListViewData struct {
 type contentRowVM struct {
 	ID        string
 	Status    storage.ContentStatus
-	Cells     []string
+	Cells     []contentCellVM
 	CreatedAt string
+}
+
+// contentCellVM is one table cell in the content list. Media fields render
+// as small thumbnails (the file itself, not its id/name -- a filename tells
+// an editor scanning the table nothing, the picture does) via MediaURLs;
+// every other field renders as truncated text via Text.
+type contentCellVM struct {
+	Text      string
+	MediaURLs []string
+}
+
+// mediaThumbURLs extracts one or more "/projects/.../medias/{id}/file" URLs
+// from a Media field's raw value, which is a single id string (Simple
+// cardinality) or a JSON array of id strings (Collection). Missing/blank
+// ids are skipped rather than producing a broken <img>.
+func mediaThumbURLs(projectID string, raw any) []string {
+	ids := make([]string, 0, 1)
+	switch t := raw.(type) {
+	case string:
+		if t != "" {
+			ids = append(ids, t)
+		}
+	case []any:
+		for _, item := range t {
+			if s, ok := item.(string); ok && s != "" {
+				ids = append(ids, s)
+			}
+		}
+	}
+	urls := make([]string, 0, len(ids))
+	for _, id := range ids {
+		urls = append(urls, "/projects/"+projectID+"/medias/"+id+"/file")
+	}
+	return urls
 }
 
 func (s *Server) htmxContentList(w http.ResponseWriter, r *http.Request) {
@@ -387,9 +421,13 @@ func (s *Server) htmxContentList(w http.ResponseWriter, r *http.Request) {
 	for _, c := range items {
 		var data map[string]any
 		_ = json.Unmarshal([]byte(c.Data), &data)
-		cells := make([]string, 0, len(def.Fields))
+		cells := make([]contentCellVM, 0, len(def.Fields))
 		for _, f := range def.Fields {
-			cells = append(cells, formatCell(data[f.Key]))
+			if f.Type == trischema.Media {
+				cells = append(cells, contentCellVM{MediaURLs: mediaThumbURLs(project.ID, data[f.Key])})
+			} else {
+				cells = append(cells, contentCellVM{Text: formatCell(data[f.Key])})
+			}
 		}
 		rows = append(rows, contentRowVM{ID: c.ID, Status: c.Status, Cells: cells, CreatedAt: c.CreatedAt.Format("2006-01-02 15:04")})
 	}
@@ -411,15 +449,18 @@ func (s *Server) htmxContentList(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "page:content_list", data)
 }
 
+// cellTextLimit caps how much of a cell's value the content-list table
+// shows: rows are meant for scanning many records at a glance, not reading
+// full field values (the row-edit modal has the untruncated data).
+const cellTextLimit = 64
+
 func formatCell(v any) string {
+	var s string
 	switch t := v.(type) {
 	case nil:
 		return ""
 	case string:
-		if len(t) > 80 {
-			return t[:80] + "…"
-		}
-		return t
+		s = t
 	case bool:
 		if t {
 			return "✓"
@@ -430,10 +471,14 @@ func formatCell(v any) string {
 		for _, item := range t {
 			parts = append(parts, fmt.Sprintf("%v", item))
 		}
-		return strings.Join(parts, ", ")
+		s = strings.Join(parts, ", ")
 	default:
-		return fmt.Sprintf("%v", t)
+		s = fmt.Sprintf("%v", t)
 	}
+	if len(s) > cellTextLimit {
+		s = s[:cellTextLimit] + "…"
+	}
+	return s
 }
 
 type contentFormViewData struct {
