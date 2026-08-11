@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -124,6 +126,57 @@ func TestHTMX_DeployTile_EndToEnd(t *testing.T) {
 	rec = e.getHTML("/projects/"+p.ID+"/deploy-tile", admin)
 	if strings.TrimSpace(rec.Body.String()) != "" {
 		t.Fatalf("expected the tile to disappear past the grace period, got: %s", rec.Body.String())
+	}
+}
+
+// TestHTMX_DeployTile_ShowsImmediatelyAfterSave is a regression test for the
+// race between a content save's redirect and dispatchWebhooksAsync's
+// background goroutine: the tile must be visible on the very first page
+// load after saving, not only once the async send finishes and inserts its
+// own delivery row (previously, that could take up to the next 5s poll to
+// catch up). Blocks the fake GitHub API so the goroutine is still in flight
+// when the tile is checked -- proving visibility comes from the
+// synchronously-inserted pending row (CreatePendingWebhookDelivery), not
+// from the send having already completed by coincidence of test timing.
+func TestHTMX_DeployTile_ShowsImmediatelyAfterSave(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	concepteur := e.createUser("immediate1@x.com", false)
+	admin := e.createUser("immediate2@x.com", true)
+	p := e.createProject("ImmediateTile")
+	e.setRole(concepteur.ID, p.ID, storage.RoleConcepteur)
+	createSchemaViaHTMX(t, e, p.ID, concepteur, "note",
+		fieldFormValues(0, "body", "Body", "Text", "Simple", true, "", "", ""))
+
+	release := make(chan struct{})
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer fake.Close()
+	e.server.Dispatcher.GitHubAPIBaseURL = fake.URL
+	defer close(release)
+
+	createResp := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site", GitHubToken: "ghp_secret",
+		Events: []string{"content.update"},
+	})
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating webhook, got %d: %s", createResp.Code, createResp.Body.String())
+	}
+
+	rec := e.postForm("/projects/"+p.ID+"/schemas/note/contents/create", concepteur, url.Values{
+		"body": {"hi"}, "status": {"draft"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// No sleep here on purpose: the background send is still blocked on
+	// `release`. If the tile only became visible once the goroutine's
+	// FinalizeWebhookDelivery ran, this check would see nothing yet.
+	tile := e.getHTML("/projects/"+p.ID+"/deploy-tile", concepteur)
+	if !strings.Contains(tile.Body.String(), "Déploiement en cours") {
+		t.Fatalf("expected the tile to show in-progress immediately after save, got: %q", tile.Body.String())
 	}
 }
 

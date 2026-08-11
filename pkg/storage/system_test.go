@@ -496,6 +496,66 @@ func TestSystemDB_LatestGitHubDispatchDelivery(t *testing.T) {
 	}
 }
 
+// TestSystemDB_PendingWebhookDelivery covers the CreatePendingWebhookDelivery
+// / FinalizeWebhookDelivery pair the topbar deploy tile's immediate-feedback
+// fix relies on (see dispatchWebhooksAsync in pkg/api): a pending row must
+// surface from LatestGitHubDispatchDelivery just like a resolved success
+// does, and finalizing it as a failure must make it stop surfacing, exactly
+// like a delivery that was recorded as a failure outright.
+func TestSystemDB_PendingWebhookDelivery(t *testing.T) {
+	ctx := context.Background()
+	db := newTestSystemDB(t)
+	proj := &Project{ID: "proj_pendingdelivery", Name: "PendingDelivery", FolderPath: "./data/projects/proj_pendingdelivery"}
+	if err := db.CreateProject(ctx, proj); err != nil {
+		t.Fatal(err)
+	}
+	dispatch := &Webhook{ID: "wh-pending-delivery", ProjectID: proj.ID, Kind: "github_dispatch", Config: `{"owner":"o","repo":"r","token":"t"}`, Events: []string{"content.update"}}
+	if err := db.CreateWebhook(ctx, dispatch); err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := db.CreatePendingWebhookDelivery(ctx, dispatch.ID, proj.ID, "content.update")
+	if err != nil {
+		t.Fatalf("create pending: %v", err)
+	}
+
+	// Pending, unresolved: must already surface as the latest delivery, the
+	// same as a resolved success would -- this is what lets the tile show
+	// "in progress" before the background send has even finished.
+	got, err := db.LatestGitHubDispatchDelivery(ctx, proj.ID)
+	if err != nil || got == nil {
+		t.Fatalf("expected the pending delivery to surface: %v, %+v", err, got)
+	}
+	if got.ID != id || !got.Pending || got.Success {
+		t.Fatalf("expected a pending, not-yet-successful delivery, got %+v", got)
+	}
+
+	// Finalized as a failure: must stop surfacing, same as any other failed
+	// dispatch call -- nothing downstream was ever triggered to track.
+	if err := db.FinalizeWebhookDelivery(ctx, id, false, 1, 401, "unexpected status code 401"); err != nil {
+		t.Fatalf("finalize: %v", err)
+	}
+	if got, err := db.LatestGitHubDispatchDelivery(ctx, proj.ID); err != nil || got != nil {
+		t.Fatalf("expected a finalized-failed delivery to not surface: %v, %+v", err, got)
+	}
+
+	// A second pending delivery, finalized as a success: must surface again.
+	id2, err := db.CreatePendingWebhookDelivery(ctx, dispatch.ID, proj.ID, "content.update")
+	if err != nil {
+		t.Fatalf("create second pending: %v", err)
+	}
+	if err := db.FinalizeWebhookDelivery(ctx, id2, true, 1, 204, ""); err != nil {
+		t.Fatalf("finalize success: %v", err)
+	}
+	got2, err := db.LatestGitHubDispatchDelivery(ctx, proj.ID)
+	if err != nil || got2 == nil || got2.ID != id2 {
+		t.Fatalf("expected the finalized-success delivery to surface: %v, %+v", err, got2)
+	}
+	if got2.Pending || !got2.Success {
+		t.Fatalf("expected pending=false, success=true after finalizing, got %+v", got2)
+	}
+}
+
 func TestSystemDB_ListPendingGitHubDispatchDeliveries(t *testing.T) {
 	ctx := context.Background()
 	db := newTestSystemDB(t)

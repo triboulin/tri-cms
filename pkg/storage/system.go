@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     deploy_conclusion TEXT NOT NULL DEFAULT '',
     deploy_run_url TEXT NOT NULL DEFAULT '',
     deploy_resolved_at DATETIME,
+    pending BOOLEAN NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_project ON webhook_deliveries(project_id, created_at DESC);
@@ -175,6 +176,11 @@ func migrateProjectColumns(db *sql.DB) error {
 // migrateWebhookDeliveryColumns adds the deploy_run_* columns to
 // pre-existing webhook_deliveries tables (from before deploy-status
 // polling existed), the same pattern as the other migrate*Columns above.
+// Also adds `pending`, used to record a delivery row synchronously the
+// moment a dispatch is decided on -- before the actual network call runs in
+// its background goroutine -- so the topbar deploy tile has something to
+// show on the very first page load after a save instead of only catching up
+// on the next 5s poll (see CreatePendingWebhookDelivery/dispatchWebhooksAsync).
 func migrateWebhookDeliveryColumns(db *sql.DB) error {
 	stmts := []string{
 		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_run_id INTEGER NOT NULL DEFAULT 0`,
@@ -182,6 +188,7 @@ func migrateWebhookDeliveryColumns(db *sql.DB) error {
 		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_conclusion TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_run_url TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE webhook_deliveries ADD COLUMN deploy_resolved_at DATETIME`,
+		`ALTER TABLE webhook_deliveries ADD COLUMN pending BOOLEAN NOT NULL DEFAULT 0`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
@@ -728,14 +735,41 @@ func (s *SystemDB) RecordWebhookDelivery(ctx context.Context, d *WebhookDelivery
 	return err
 }
 
+// CreatePendingWebhookDelivery inserts a placeholder delivery row (pending =
+// true, success = false) synchronously -- meant to be called from the same
+// request that decided a dispatch will happen, before the actual send runs
+// in a background goroutine. Returns the new row's id, to be passed to
+// FinalizeWebhookDelivery once the send completes. See WebhookDelivery.Pending
+// for why this exists: without it, the topbar deploy tile has nothing to
+// read until the async send finishes and inserts its own row, which can
+// take longer than the page's first render.
+func (s *SystemDB) CreatePendingWebhookDelivery(ctx context.Context, webhookID, projectID, event string) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO webhook_deliveries (webhook_id, project_id, event, success, pending) VALUES (?, ?, ?, 0, 1)`,
+		webhookID, projectID, event)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// FinalizeWebhookDelivery records the real outcome of a delivery started by
+// CreatePendingWebhookDelivery, clearing its pending flag.
+func (s *SystemDB) FinalizeWebhookDelivery(ctx context.Context, id int64, success bool, attempts, statusCode int, errMsg string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE webhook_deliveries SET success = ?, attempts = ?, status_code = ?, error = ?, pending = 0 WHERE id = ?`,
+		success, attempts, statusCode, errMsg, id)
+	return err
+}
+
 const webhookDeliveryColumns = `id, webhook_id, project_id, event, success, attempts, status_code, error,
-	deploy_run_id, deploy_status, deploy_conclusion, deploy_run_url, deploy_resolved_at, created_at`
+	deploy_run_id, deploy_status, deploy_conclusion, deploy_run_url, deploy_resolved_at, pending, created_at`
 
 func scanWebhookDelivery(row interface{ Scan(...any) error }) (*WebhookDelivery, error) {
 	var d WebhookDelivery
 	var resolvedAt sql.NullTime
 	if err := row.Scan(&d.ID, &d.WebhookID, &d.ProjectID, &d.Event, &d.Success, &d.Attempts, &d.StatusCode, &d.Error,
-		&d.DeployRunID, &d.DeployStatus, &d.DeployConclusion, &d.DeployRunURL, &resolvedAt, &d.CreatedAt); err != nil {
+		&d.DeployRunID, &d.DeployStatus, &d.DeployConclusion, &d.DeployRunURL, &resolvedAt, &d.Pending, &d.CreatedAt); err != nil {
 		return nil, err
 	}
 	if resolvedAt.Valid {
@@ -766,16 +800,18 @@ func (s *SystemDB) ListWebhookDeliveries(ctx context.Context, projectID string, 
 	return out, rows.Err()
 }
 
-// LatestGitHubDispatchDelivery returns the most recent successful
-// kind=github_dispatch delivery for a project, or (nil, nil) if there is
-// none -- used by the topbar deploy tile (see PageData.DeployTile) to show
-// the current/most recent deploy's outcome regardless of which webhook or
-// event triggered it.
+// LatestGitHubDispatchDelivery returns the most recent successful (or still
+// pending -- see WebhookDelivery.Pending) kind=github_dispatch delivery for
+// a project, or (nil, nil) if there is none -- used by the topbar deploy
+// tile (see PageData.DeployTile) to show the current/most recent deploy's
+// outcome regardless of which webhook or event triggered it. Including
+// pending rows means the tile can show "in progress" starting on the first
+// page load after a save, not just once the background send finishes.
 func (s *SystemDB) LatestGitHubDispatchDelivery(ctx context.Context, projectID string) (*WebhookDelivery, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+deliveryCols("wd")+`
 		 FROM webhook_deliveries wd JOIN webhooks w ON w.id = wd.webhook_id
-		 WHERE wd.project_id = ? AND w.kind = 'github_dispatch' AND wd.success = 1
+		 WHERE wd.project_id = ? AND w.kind = 'github_dispatch' AND (wd.success = 1 OR wd.pending = 1)
 		 ORDER BY wd.created_at DESC, wd.id DESC LIMIT 1`,
 		projectID)
 	d, err := scanWebhookDelivery(row)

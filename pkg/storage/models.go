@@ -105,6 +105,15 @@ type WebhookDelivery struct {
 	Error      string    `json:"error"`
 	CreatedAt  time.Time `json:"created_at"`
 
+	// Pending is true from the moment a dispatch is decided on (row inserted
+	// synchronously by CreatePendingWebhookDelivery, before the actual send
+	// runs in its background goroutine) until FinalizeWebhookDelivery
+	// records the real outcome. Lets the topbar deploy tile show "in
+	// progress" starting on the very first page load after a save, instead
+	// of only catching up once the async send finishes and the next 5s poll
+	// happens to land after it.
+	Pending bool `json:"pending"`
+
 	// DeployRunID/DeployStatus/DeployConclusion/DeployRunURL/DeployResolvedAt
 	// track the downstream GitHub Actions run a kind=github_dispatch
 	// delivery most likely triggered (see

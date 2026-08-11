@@ -191,12 +191,11 @@ func (s *Server) htmxUploadMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	back := "/projects/" + project.ID + "/medias"
 
-	m, err := s.saveUploadedMedia(w, r, project)
-	if err != nil {
+	if _, err := s.saveUploadedMedia(w, r, project); err != nil {
 		redirectWithFlash(w, r, back, err.Error(), "error")
 		return
 	}
-	redirectWithFlash(w, r, back, "Média « "+m.Filename+" » téléversé.", "success")
+	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 
 // htmxUploadMediaForPicker uploads a file the same way htmxUploadMedia does,
@@ -253,5 +252,5 @@ func (s *Server) htmxDeleteMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = os.Remove(filepath.Join(s.Manager.ProjectMediaDir(project.ID), m.FilePath))
 	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventMediaDelete, map[string]string{"id": mediaID, "filename": m.Filename})
-	redirectWithFlash(w, r, back, "Média « "+m.Filename+" » supprimé.", "success")
+	http.Redirect(w, r, back, http.StatusSeeOther)
 }

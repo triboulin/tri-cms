@@ -321,11 +321,15 @@ func (s *Server) handleDeleteContent(w http.ResponseWriter, r *http.Request) {
 // dispatchWebhooksAsync fires every webhook subscribed to `event` for a
 // project without blocking the HTTP response: only the (cheap, indexed)
 // lookup of subscribers runs synchronously, so the return value -- whether
-// any webhook was actually subscribed -- is available immediately, letting
-// callers tell the user "redéploiement en cours" only when a delivery is
-// genuinely about to happen rather than unconditionally. Every attempt is
-// recorded via RecordWebhookDelivery (success or failure) so the Webhooks
-// page can show a real history; delivery retry/backoff is handled inside
+// any webhook was actually subscribed -- is available immediately. A
+// placeholder "pending" delivery row is also inserted synchronously (see
+// storage.CreatePendingWebhookDelivery) for each subscriber, before the
+// actual send runs in the background goroutine below -- so the topbar
+// deploy tile has something to read starting on the very first page load
+// after a save, rather than only catching up once the async send finishes
+// and the next 5s poll happens to land after it. FinalizeWebhookDelivery
+// then records the real outcome (success or failure) so the Webhooks page
+// can show a real history; delivery retry/backoff is handled inside
 // pkg/webhooks.Dispatcher.
 func (s *Server) dispatchWebhooksAsync(ctx context.Context, projectID, event string, payload any) bool {
 	if s.Dispatcher == nil {
@@ -335,9 +339,17 @@ func (s *Server) dispatchWebhooksAsync(ctx context.Context, projectID, event str
 	if err != nil || len(whs) == 0 {
 		return false
 	}
+	deliveryIDs := make([]int64, len(whs))
+	for i, wh := range whs {
+		id, err := s.System.CreatePendingWebhookDelivery(ctx, wh.ID, projectID, event)
+		if err != nil {
+			continue
+		}
+		deliveryIDs[i] = id
+	}
 	go func() {
 		bgCtx := context.Background()
-		for _, wh := range whs {
+		for i, wh := range whs {
 			res, err := s.Dispatcher.Send(bgCtx, wh, event, payload)
 			d := &storage.WebhookDelivery{WebhookID: wh.ID, ProjectID: projectID, Event: event}
 			switch {
@@ -346,7 +358,7 @@ func (s *Server) dispatchWebhooksAsync(ctx context.Context, projectID, event str
 			case res != nil:
 				d.Success, d.Attempts, d.StatusCode, d.Error = res.Success, res.Attempts, res.LastStatusCode, res.LastError
 			}
-			_ = s.System.RecordWebhookDelivery(bgCtx, d)
+			_ = s.System.FinalizeWebhookDelivery(bgCtx, deliveryIDs[i], d.Success, d.Attempts, d.StatusCode, d.Error)
 			if !d.Success {
 				_ = s.System.LogAction(bgCtx, "", projectID, "webhook.delivery_failed", map[string]any{"webhook_id": wh.ID, "event": event})
 			}

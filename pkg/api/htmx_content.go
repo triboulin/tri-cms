@@ -687,7 +687,7 @@ func (s *Server) htmxCreateContent(w http.ResponseWriter, r *http.Request) {
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.create", map[string]string{"schema": slug, "id": c.ID})
 	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": c.ID, "schema": slug})
 
-	redirectWithFlash(w, r, listPath, "Contenu créé.", "success")
+	http.Redirect(w, r, listPath, http.StatusSeeOther)
 }
 
 func (s *Server) htmxUpdateContent(w http.ResponseWriter, r *http.Request) {
@@ -762,7 +762,7 @@ func (s *Server) htmxUpdateContent(w http.ResponseWriter, r *http.Request) {
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.update", map[string]string{"schema": slug, "id": contentID})
 	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
 
-	redirectWithFlash(w, r, listPath, "Contenu mis à jour.", "success")
+	http.Redirect(w, r, listPath, http.StatusSeeOther)
 }
 
 func (s *Server) htmxDeleteContent(w http.ResponseWriter, r *http.Request) {
@@ -800,7 +800,7 @@ func (s *Server) htmxDeleteContent(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.delete", map[string]string{"schema": slug, "id": contentID})
 	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
-	redirectWithFlash(w, r, listPath, "Contenu supprimé.", "success")
+	http.Redirect(w, r, listPath, http.StatusSeeOther)
 }
 
 func (s *Server) htmxToggleContentStatus(w http.ResponseWriter, r *http.Request) {
@@ -833,7 +833,7 @@ func (s *Server) htmxToggleContentStatus(w http.ResponseWriter, r *http.Request)
 	}
 	_ = s.System.LogAction(r.Context(), user.ID, project.ID, "content.update", map[string]string{"schema": slug, "id": contentID, "status": string(c.Status)})
 	s.dispatchWebhooksAsync(r.Context(), project.ID, webhooks.EventContentUpdate, map[string]string{"id": contentID, "schema": slug})
-	redirectWithFlash(w, r, listPath, "Statut mis à jour : "+string(c.Status)+".", "success")
+	http.Redirect(w, r, listPath, http.StatusSeeOther)
 }
 
 func jsonTimestamp() string {
