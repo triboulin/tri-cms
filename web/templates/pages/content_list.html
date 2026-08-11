@@ -9,13 +9,13 @@
       {{template "partial:flash" .}}
       <div class="tri-section-title">
         <h2><span class="material-icons" aria-hidden="true">table_rows</span> {{.Content.Schema.Name}}</h2>
-        <a class="tri-btn" href="/projects/{{.CurrentProject.ID}}/schemas/{{.Content.Schema.Slug}}/contents/new">
-          <span class="material-icons" aria-hidden="true">add</span> Ajouter un contenu
+        <a class="tri-title-action-btn" href="/projects/{{.CurrentProject.ID}}/schemas/{{.Content.Schema.Slug}}/contents/new" title="Ajouter un contenu" aria-label="Ajouter un contenu">
+          <span class="material-icons-outlined" aria-hidden="true">add</span>
         </a>
       </div>
 
       {{if not .Content.Contents}}
-        <p class="tri-empty">Aucun contenu pour le moment. Cliquez sur « Ajouter un contenu » pour créer le premier enregistrement.</p>
+        <p class="tri-empty">Aucun contenu pour le moment. Cliquez sur « + » pour créer le premier enregistrement.</p>
       {{else}}
         <div class="tri-table-filter">
           <span class="material-icons" aria-hidden="true">search</span>

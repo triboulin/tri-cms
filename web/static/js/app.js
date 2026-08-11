@@ -12,6 +12,9 @@
 //  - a small reusable client-side table filter (opt-in via data attributes).
 //  - collapsible "create" panels: a button on a section title toggles a
 //    hidden form instead of that form permanently occupying its own row.
+//  - one-click file selection: a button opens a hidden native file input
+//    and the form submits itself the instant a file is chosen -- no
+//    separate "confirm"/"upload" click.
 
 (function () {
   'use strict';
@@ -279,4 +282,24 @@
       hashTarget.scrollIntoView({ block: 'start' });
     }
   }
+
+  // ---- One-click file selection ------------------------------------------
+  // A button with data-file-trigger="<input id>" opens that hidden native
+  // file input on click; the moment a file is chosen, its form submits
+  // itself -- picking a file *is* the action, there's no separate button to
+  // confirm it with. Whatever the form's own submit handling already does
+  // (a plain POST/redirect, or a custom handler like triUploadWithProgress)
+  // still runs exactly the same way, since this only ever triggers a real
+  // submit event.
+
+  document.querySelectorAll('[data-file-trigger]').forEach(function (btn) {
+    var input = document.getElementById(btn.getAttribute('data-file-trigger'));
+    if (!input) return;
+    btn.addEventListener('click', function () { input.click(); });
+    input.addEventListener('change', function () {
+      if (!input.files || !input.files.length) return;
+      var form = input.closest('form');
+      if (form) form.requestSubmit ? form.requestSubmit() : form.submit();
+    });
+  });
 })();

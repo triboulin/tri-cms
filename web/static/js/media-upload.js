@@ -21,9 +21,15 @@ function triUploadWithProgress(form) {
     return true; // let native "required" validation handle the empty case
   }
 
-  var bar = form.querySelector('.tri-upload-progress');
-  var fill = form.querySelector('.tri-upload-progress-fill');
-  var label = form.querySelector('.tri-upload-progress-label');
+  // The progress bar doesn't have to be a DOM descendant of the form --
+  // data-progress="<id>" points at it directly, so the trigger button can
+  // sit inline with a section title while the bar renders on its own row
+  // below (see medias.html). Falls back to a descendant lookup for any
+  // simpler form that still nests it inline.
+  var progressId = form.getAttribute('data-progress');
+  var bar = progressId ? document.getElementById(progressId) : form.querySelector('.tri-upload-progress');
+  var fill = bar ? bar.querySelector('.tri-upload-progress-fill') : null;
+  var label = bar ? bar.querySelector('.tri-upload-progress-label') : null;
   var submitBtn = form.querySelector('button[type=submit]');
 
   bar.classList.add('show');

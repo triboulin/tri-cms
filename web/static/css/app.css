@@ -42,7 +42,7 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   body::before { animation: none; }
 }
-.material-icons { font-size: 20px; line-height: 1; vertical-align: middle; }
+.material-icons, .material-icons-outlined { font-size: 20px; line-height: 1; vertical-align: middle; }
 .tri-main { min-height: 100vh; display: flex; flex-direction: column; }
 .tri-topbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -122,21 +122,31 @@ body::before {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
 }
 .tri-section-title h2 { margin: 0; display: flex; align-items: center; gap: 8px; }
+/* Icon-only "create/add" action at the end of a section title (a toggle
+   for a hidden create panel, or a direct file-selection trigger) -- a "+"
+   is self-explanatory next to a title reading "Schémas"/"Webhooks"/etc.,
+   so the label is carried by aria-label/title instead of visible text. */
+.tri-title-action-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--tri-border);
+  background: transparent; color: var(--tri-text); cursor: pointer; padding: 0;
+  text-decoration: none; /* also used on <a> (Collections/Content-list links) */
+}
+.tri-title-action-btn:hover { border-color: var(--tri-accent); color: var(--tri-accent); background: var(--tri-accent-subtle); }
+.tri-title-action-btn .material-icons-outlined { font-size: 20px; }
 .tri-card {
   background: var(--tri-card); border: 1px solid var(--tri-border); border-radius: 10px;
   margin: 8px; margin-bottom: 16px;
   padding: 16px;
 }
 .tri-card h3 { margin-top: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; }
-.tri-project-icon-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tri-project-icon-actions { display: flex; align-items: center; gap: 6px; }
 .tri-project-icon-preview {
   width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--tri-border);
   background: var(--tri-bg-subtle); display: flex; align-items: center; justify-content: center;
   overflow: hidden; flex-shrink: 0; color: var(--tri-muted);
 }
 .tri-project-icon-preview img { width: 100%; height: 100%; object-fit: cover; }
-.tri-project-icon-row .tri-inline-form { display: flex; align-items: center; gap: 8px; }
-.tri-project-icon-row input[type="file"] { font-size: 0.82rem; max-width: 220px; }
 
 /* Dashboard project cards -- a fallback for the breadcrumb's project-switcher
    dropdown, which mobile can't reach (see dashboard.html). The "Nouveau

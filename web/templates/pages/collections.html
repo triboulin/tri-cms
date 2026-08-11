@@ -10,7 +10,7 @@
       <div class="tri-section-title">
         <h2><span class="material-icons" aria-hidden="true">table_view</span> Collections</h2>
         {{if .Sidebar.Conception}}
-        <a class="tri-btn tri-btn-sm" href="/projects/{{.CurrentProject.ID}}/conception#create-schema"><span class="material-icons" aria-hidden="true">add</span> Nouveau schéma</a>
+        <a class="tri-title-action-btn" href="/projects/{{.CurrentProject.ID}}/conception#create-schema" title="Nouveau schéma" aria-label="Nouveau schéma"><span class="material-icons-outlined" aria-hidden="true">add</span></a>
         {{end}}
       </div>
       {{if not .Content.Schemas}}
