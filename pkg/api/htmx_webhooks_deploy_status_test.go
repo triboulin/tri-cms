@@ -11,6 +11,22 @@ import (
 	"tricms/pkg/storage"
 )
 
+// getHTMX is like e.getHTML but sets the HX-Request header htmx itself sends
+// on every request it originates -- needed to exercise the poll-stopping
+// (286) branches, which only apply to htmx-originated requests so that a
+// plain browser navigation to the same route always gets a normal 200.
+func (e *testEnv) getHTMX(path string, u *storage.User) *httptest.ResponseRecorder {
+	e.t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("HX-Request", "true")
+	if u != nil {
+		req.AddCookie(e.sessionCookie(u))
+	}
+	rec := httptest.NewRecorder()
+	e.router.ServeHTTP(rec, req)
+	return rec
+}
+
 // TestHTMX_WebhookDeployStatus_PageIsReadOnly is the frontend half of the
 // decoupled polling design: the Webhooks page must render whatever the
 // background poller (pollPendingDeploys) has already persisted, and must
@@ -126,5 +142,64 @@ func TestHTMX_WebhookDeployStatus_RendersPersistedState(t *testing.T) {
 	body = rec.Body.String()
 	if !strings.Contains(body, "Échec du déploiement") || !strings.Contains(body, "tri-badge-danger") {
 		t.Fatalf("expected a failure deploy badge, got: %s", body)
+	}
+}
+
+// TestHTMX_WebhookDeployStatus_StopsPollingOnceStable confirms the delivery
+// history table's 5s poll (#webhook-history's hx-trigger) stops once the
+// most recent delivery has reached a stable state (deploy completed, or a
+// generic delivery whose send already finished) -- and never affects a
+// plain browser navigation to the same route, only the htmx-originated poll
+// requests, which htmx recognizes via the 286 "stop polling" status code.
+func TestHTMX_WebhookDeployStatus_StopsPollingOnceStable(t *testing.T) {
+	e := newHTMXTestEnv(t)
+	admin := e.createUser("stoppolling@x.com", true)
+	p := e.createProject("StopPolling")
+
+	// No deliveries at all yet: nothing to poll for.
+	rec := e.getHTMX("/projects/"+p.ID+"/webhooks", admin)
+	if rec.Code != 286 {
+		t.Fatalf("expected 286 (stop polling) with no deliveries yet, got %d", rec.Code)
+	}
+	// A plain navigation to the same route must be unaffected.
+	rec = e.getHTML("/projects/"+p.ID+"/webhooks", admin)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected a plain navigation to always get 200, got %d", rec.Code)
+	}
+
+	createResp := e.request(http.MethodPost, "/api/v1/projects/"+p.ID+"/webhooks", admin, webhookRequest{
+		Kind: "github_dispatch", GitHubOwner: "louis", GitHubRepo: "mon-site", GitHubToken: "ghp_secret",
+		Events: []string{"content.publish"},
+	})
+	wh := decodeBody[storage.Webhook](t, createResp)
+	if err := e.server.System.RecordWebhookDelivery(bgCtx(), &storage.WebhookDelivery{
+		WebhookID: wh.ID, ProjectID: p.ID, Event: "content.publish", Success: true, Attempts: 1, StatusCode: 204,
+	}); err != nil {
+		t.Fatalf("record delivery: %v", err)
+	}
+
+	// Sent but not yet correlated to a run: still an open question, keep polling.
+	rec = e.getHTMX("/projects/"+p.ID+"/webhooks", admin)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (keep polling) while uncorrelated, got %d", rec.Code)
+	}
+
+	deliveries, _ := e.server.System.ListWebhookDeliveries(bgCtx(), p.ID, 10)
+	if err := e.server.System.UpdateWebhookDeliveryDeployState(bgCtx(), deliveries[0].ID, 1, "completed", "success", "https://github.com/louis/mon-site/actions/runs/1"); err != nil {
+		t.Fatalf("update deploy state: %v", err)
+	}
+
+	// Resolved: a stable state, stop polling.
+	rec = e.getHTMX("/projects/"+p.ID+"/webhooks", admin)
+	if rec.Code != 286 {
+		t.Fatalf("expected 286 (stop polling) once the deploy resolved, got %d", rec.Code)
+	}
+	// Still a normal 200 for anyone actually navigating to the page.
+	rec = e.getHTML("/projects/"+p.ID+"/webhooks", admin)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected a plain navigation to still get 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Déployé") {
+		t.Fatalf("expected the resolved state to still render, got: %s", rec.Body.String())
 	}
 }

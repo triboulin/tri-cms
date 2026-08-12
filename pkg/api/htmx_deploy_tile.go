@@ -72,6 +72,15 @@ func (s *Server) htmxDeployTile(w http.ResponseWriter, r *http.Request) {
 	}
 	view := deployTileView(d)
 	if view == nil {
+		// Nothing to show, and nothing left that could change it on its own:
+		// either there's never been a delivery, or the last one is done and
+		// past the grace period. Either way a future delivery only ever
+		// starts from a fresh page load (publishing is a plain form POST,
+		// not an in-page action), so there's no reason for the topbar tile
+		// to keep polling every 5s forever. 286 is htmx's documented "stop
+		// polling" response code -- the swap (here, an empty body) still
+		// happens, but the element's poll timer is cancelled.
+		w.WriteHeader(286)
 		return
 	}
 	if err := s.Templates.ExecuteTemplate(w, "partial:deploy_tile", view); err != nil {

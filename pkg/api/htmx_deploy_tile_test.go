@@ -74,10 +74,12 @@ func TestHTMX_DeployTile_EndToEnd(t *testing.T) {
 	admin := e.createUser("tile@x.com", true)
 	p := e.createProject("TileCheck")
 
-	// No github_dispatch delivery at all yet: empty response.
+	// No github_dispatch delivery at all yet: empty response, and nothing
+	// to poll for until a fresh page load (publishing is a plain form POST,
+	// not an in-page action), so htmx is told to stop polling (286).
 	rec := e.getHTML("/projects/"+p.ID+"/deploy-tile", admin)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if rec.Code != 286 {
+		t.Fatalf("expected 286 (stop polling), got %d", rec.Code)
 	}
 	if strings.TrimSpace(rec.Body.String()) != "" {
 		t.Fatalf("expected an empty tile with no delivery yet, got: %s", rec.Body.String())
@@ -126,6 +128,11 @@ func TestHTMX_DeployTile_EndToEnd(t *testing.T) {
 	rec = e.getHTML("/projects/"+p.ID+"/deploy-tile", admin)
 	if strings.TrimSpace(rec.Body.String()) != "" {
 		t.Fatalf("expected the tile to disappear past the grace period, got: %s", rec.Body.String())
+	}
+	// Resolved and past the grace period is a stable state -- nothing about
+	// this delivery will ever change again, so polling should stop too.
+	if rec.Code != 286 {
+		t.Fatalf("expected 286 (stop polling) once resolved past the grace period, got %d", rec.Code)
 	}
 }
 
@@ -190,9 +197,12 @@ func TestHTMX_DeployTile_AnyProjectMemberCanSeeIt(t *testing.T) {
 	p := e.createProject("TileAccess")
 	e.setRole(redacteur.ID, p.ID, storage.RoleRedacteur)
 
+	// No delivery has ever been recorded for this project, so the response
+	// is 286 (stop polling, see htmxDeployTile) rather than 200 -- still a
+	// granted request, just distinct from the 403 an outsider gets below.
 	rec := e.getHTML("/projects/"+p.ID+"/deploy-tile", redacteur)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected a REDACTEUR to see the deploy tile endpoint (200), got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != 286 {
+		t.Fatalf("expected a REDACTEUR to see the deploy tile endpoint (286, nothing to show yet), got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	outsider := e.createUser("outsider-tile@x.com", false)

@@ -59,6 +59,22 @@ type deployBadge struct {
 	URL   string // link to the GitHub Actions run; empty until correlated
 }
 
+// deliveryNeedsPolling reports whether d's outcome might still change: a
+// send still in flight (Pending), or a github_dispatch call that succeeded
+// but whose downstream run hasn't reached a final state yet. A send that
+// failed outright, or any resolved github_dispatch run, or any generic
+// (non-github_dispatch) delivery once sent, is done for good -- nothing the
+// background poller or anything else will ever update.
+func deliveryNeedsPolling(d *storage.WebhookDelivery, isGitHubDispatch bool) bool {
+	if d.Pending {
+		return true
+	}
+	if !isGitHubDispatch || !d.Success {
+		return false
+	}
+	return !d.DeployFinal()
+}
+
 func deployStatusBadge(d *storage.WebhookDelivery) *deployBadge {
 	switch d.DeployStatus {
 	case "":
@@ -177,6 +193,24 @@ func (s *Server) htmxWebhooks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applyFlash(r, data)
+
+	// The delivery history table polls this same route every 5s (see
+	// #webhook-history's hx-trigger in webhooks.html) to catch a
+	// github_dispatch delivery's deploy state as it resolves. Once the most
+	// recent delivery is done for good -- or there's never been one at all
+	// -- (deliveries is newest-first, see ListWebhookDeliveries), a plain
+	// browser navigation still gets the normal 200 -- only the
+	// htmx-originated poll request gets 286 (htmx's "stop polling" response
+	// code), so the poll stops without affecting the initial page load.
+	pollDeliveries := false
+	if len(deliveries) > 0 {
+		latest := deliveries[0]
+		isGitHubDispatch := whByID[latest.WebhookID] != nil && whByID[latest.WebhookID].Kind == webhooks.KindGitHubDispatch
+		pollDeliveries = deliveryNeedsPolling(latest, isGitHubDispatch)
+	}
+	if !pollDeliveries && r.Header.Get("HX-Request") == "true" {
+		w.WriteHeader(286)
+	}
 	s.render(w, "page:webhooks", data)
 }
 
