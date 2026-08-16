@@ -15,9 +15,25 @@
 //  - one-click file selection: a button opens a hidden native file input
 //    and the form submits itself the instant a file is chosen -- no
 //    separate "confirm"/"upload" click.
+//  - flash messages (partial:flash) are carried as ?flash=...&flash_kind=...
+//    query params by the post/redirect/get handlers. Once shown, that query
+//    string is stripped from the address bar so a later refresh, bookmark,
+//    or shared link doesn't silently replay a stale "created"/"deleted"
+//    banner.
 
 (function () {
   'use strict';
+
+  // ---- Flash messages: show once, then scrub the URL --------------------
+
+  if (window.location.search.indexOf('flash=') !== -1 && window.history.replaceState) {
+    var params = new URLSearchParams(window.location.search);
+    params.delete('flash');
+    params.delete('flash_kind');
+    var rest = params.toString();
+    var cleanURL = window.location.pathname + (rest ? '?' + rest : '') + window.location.hash;
+    window.history.replaceState(window.history.state, '', cleanURL);
+  }
 
   // ---- Breadcrumb dropdowns: click/keyboard, not just :hover ------------
 
@@ -200,7 +216,9 @@
 
     e.preventDefault();
     showConfirmModal(
-      message || 'Cette action est irréversible. Tapez le nom exact pour confirmer.',
+      message || (expectedName
+        ? 'Cette action est irréversible. Tapez « ' + expectedName + ' » pour confirmer.'
+        : 'Cette action est irréversible.'),
       expectedName || null,
       function () {
         if (expectedName) {
@@ -250,6 +268,29 @@
       var scope = input.closest('.tri-content') || document;
       var empty = scope.querySelector('.tri-filter-empty');
       if (empty) empty.style.display = visible === 0 ? '' : 'none';
+    });
+  });
+
+  // ---- Slug auto-suggestion from a sibling "name" field ------------------
+  // <input data-slug-source> fills the form's input[name="slug"] with a
+  // slugified copy of its own value as the user types -- but only until the
+  // slug field is edited directly, so a deliberate slug always wins over the
+  // suggestion. The slug stays a plain text input either way (nothing here
+  // makes it read-only): this only removes the busywork of retyping the
+  // same thing twice for the common case.
+  document.querySelectorAll('[data-slug-source]').forEach(function (nameInput) {
+    var form = nameInput.closest('form');
+    var slugInput = form && form.querySelector('input[name="slug"]');
+    if (!slugInput) return;
+    var slugTouched = slugInput.value.trim() !== '';
+    slugInput.addEventListener('input', function () { slugTouched = true; });
+    nameInput.addEventListener('input', function () {
+      if (slugTouched) return;
+      slugInput.value = nameInput.value
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
     });
   });
 

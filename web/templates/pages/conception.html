@@ -11,27 +11,31 @@
       <div class="tri-card">
         <div class="tri-section-title">
           <h3><span class="material-icons" aria-hidden="true">image</span> Icône du projet</h3>
-          <div class="tri-project-icon-actions">
-            <form class="tri-inline-form" method="post" action="/projects/{{.CurrentProject.ID}}/icon" enctype="multipart/form-data">
-              <input type="file" name="icon" id="project-icon-input" accept=".png,.jpg,.jpeg,.svg,.webp,.gif" hidden required>
-              <button type="button" class="tri-title-action-btn" data-file-trigger="project-icon-input"
-                      title="{{if .CurrentProject.IconPath}}Changer l'icône{{else}}Téléverser une icône{{end}} (2 Mo max)"
-                      aria-label="{{if .CurrentProject.IconPath}}Changer l'icône{{else}}Téléverser une icône{{end}}">
-                <span class="material-icons-outlined" aria-hidden="true">add</span>
-              </button>
-            </form>
+        </div>
+        <div class="tri-project-icon-row">
+          <form class="tri-inline-form" method="post" action="/projects/{{.CurrentProject.ID}}/icon" enctype="multipart/form-data">
+            <input type="file" name="icon" id="project-icon-input" accept=".png,.jpg,.jpeg,.svg,.webp,.gif" hidden required>
+            <button type="button" class="tri-project-icon-dropzone{{if .CurrentProject.IconPath}} tri-project-icon-dropzone-filled{{end}}"
+                    data-file-trigger="project-icon-input"
+                    title="{{if .CurrentProject.IconPath}}Changer l'icône (2 Mo max){{else}}Cliquer pour choisir une image (2 Mo max){{end}}"
+                    aria-label="{{if .CurrentProject.IconPath}}Changer l'icône du projet{{else}}Téléverser une icône pour le projet{{end}}">
+              {{if .CurrentProject.IconPath}}
+                <img src="/projects/{{.CurrentProject.ID}}/icon" alt="">
+              {{else}}
+                <span class="material-icons-outlined" aria-hidden="true">add_photo_alternate</span>
+              {{end}}
+              <span class="tri-project-icon-dropzone-badge" aria-hidden="true"><span class="material-icons-outlined">edit</span></span>
+            </button>
+          </form>
+          <div>
+            <p class="tri-hint" style="margin:0 0 8px;">PNG, JPG, SVG, WebP ou GIF, 2 Mo max. Remplace le logo triCMS par ce projet dans le fil d'ariane. Cliquez sur l'image pour la changer.</p>
             {{if .CurrentProject.IconPath}}
             <form class="tri-inline-form" method="post" action="/projects/{{.CurrentProject.ID}}/icon/delete" data-confirm="Revenir au logo triCMS par défaut ?">
-              <button class="tri-icon-btn danger" type="submit" title="Réinitialiser" aria-label="Réinitialiser l'icône"><span class="material-icons" aria-hidden="true">restart_alt</span></button>
+              <button class="tri-btn tri-btn-sm tri-btn-ghost" type="submit"><span class="material-icons" aria-hidden="true">restart_alt</span> Réinitialiser</button>
             </form>
             {{end}}
           </div>
         </div>
-        <span class="tri-project-icon-preview">
-          {{if .CurrentProject.IconPath}}<img src="/projects/{{.CurrentProject.ID}}/icon" alt="">
-          {{else}}<span class="material-icons" aria-hidden="true">folder_open</span>{{end}}
-        </span>
-        <p class="tri-hint">PNG, JPG, SVG, WebP ou GIF, 2 Mo max. Remplace le logo triCMS par ce projet dans le fil d'ariane.</p>
       </div>
 
       <div class="tri-section-title">
@@ -70,11 +74,11 @@
           <div class="tri-form-row">
             <div>
               <label>Slug (immuable, utilisé dans les URLs d'API)</label>
-              <input type="text" name="slug" value="{{.Content.NewSchemaSlug}}" placeholder="ex: article" pattern="[a-z0-9_-]+" required>
+              <input type="text" name="slug" value="{{.Content.NewSchemaSlug}}" placeholder="ex: article" pattern="[a-z0-9_\-]+" required>
             </div>
             <div>
               <label>Nom</label>
-              <input type="text" name="name" value="{{.Content.NewSchemaName}}" placeholder="ex: Article" required>
+              <input type="text" name="name" value="{{.Content.NewSchemaName}}" placeholder="ex: Article" required data-slug-source>
             </div>
           </div>
 
