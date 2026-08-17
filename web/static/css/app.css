@@ -142,14 +142,18 @@ body::before {
 /* Icon-only "create/add" action at the end of a section title (a toggle
    for a hidden create panel, or a direct file-selection trigger) -- a "+"
    is self-explanatory next to a title reading "Schémas"/"Webhooks"/etc.,
-   so the label is carried by aria-label/title instead of visible text. */
+   so the label is carried by aria-label/title instead of visible text.
+   Filled with the accent color (not just a thin border) so it reads as the
+   primary action of the section on first glance instead of blending into
+   the header like a passive icon. */
 .tri-title-action-btn {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--tri-border);
-  background: transparent; color: var(--tri-text); cursor: pointer; padding: 0;
+  width: 34px; height: 34px; border-radius: 8px; border: none;
+  background: var(--tri-accent); color: #fff; cursor: pointer; padding: 0;
   text-decoration: none; /* also used on <a> (Collections/Content-list links) */
+  box-shadow: 0 1px 2px rgba(29,31,37,0.15);
 }
-.tri-title-action-btn:hover { border-color: var(--tri-accent); color: var(--tri-accent); background: var(--tri-accent-subtle); }
+.tri-title-action-btn:hover { background: var(--tri-accent-hover); }
 .tri-title-action-btn .material-icons-outlined { font-size: 20px; }
 .tri-card {
   background: var(--tri-card); border: 1px solid var(--tri-border); border-radius: 10px;
@@ -157,13 +161,31 @@ body::before {
   padding: 16px;
 }
 .tri-card h3 { margin-top: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; }
-.tri-project-icon-actions { display: flex; align-items: center; gap: 6px; }
-.tri-project-icon-preview {
-  width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--tri-border);
-  background: var(--tri-bg-subtle); display: flex; align-items: center; justify-content: center;
-  overflow: hidden; flex-shrink: 0; color: var(--tri-muted);
+/* Project-icon upload: the preview square itself is the click target
+   (data-file-trigger), not a separate decorative icon next to a tiny "+"
+   button elsewhere -- the old layout looked like a passive folder icon,
+   which read as inert rather than as the upload control it needed to be. */
+.tri-project-icon-row { display: flex; align-items: center; gap: 16px; }
+.tri-project-icon-dropzone {
+  position: relative; flex-shrink: 0; width: 72px; height: 72px; border-radius: 10px;
+  border: 1.5px dashed var(--tri-border); background: var(--tri-bg-subtle);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  color: var(--tri-muted); cursor: pointer; padding: 0; font-family: inherit;
 }
-.tri-project-icon-preview img { width: 100%; height: 100%; object-fit: cover; }
+.tri-project-icon-dropzone-filled { border-style: solid; }
+.tri-project-icon-dropzone img { width: 100%; height: 100%; object-fit: cover; }
+.tri-project-icon-dropzone .material-icons-outlined { font-size: 26px; }
+.tri-project-icon-dropzone:hover, .tri-project-icon-dropzone:focus-visible {
+  border-color: var(--tri-accent); color: var(--tri-accent); background: var(--tri-accent-subtle);
+}
+/* A persistent pencil badge -- not just a hover-only cue -- so the control
+   reads as editable even before the pointer ever reaches it. */
+.tri-project-icon-dropzone-badge {
+  position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--tri-accent); color: #fff; display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--tri-card);
+}
+.tri-project-icon-dropzone-badge .material-icons-outlined { font-size: 13px; }
 
 /* Dashboard project cards -- a fallback for the breadcrumb's project-switcher
    dropdown, which mobile can't reach (see dashboard.html). The "Nouveau
@@ -249,6 +271,17 @@ table.tri-table td.tri-actions { text-align: right; white-space: nowrap; }
 .tri-btn-danger:hover { background: var(--tri-danger); color: #fff; }
 .tri-btn-ghost { background: transparent; color: var(--tri-muted); border: 1px solid var(--tri-border); }
 .tri-btn-ghost:hover { color: var(--tri-text); border-color: var(--tri-muted); }
+/* Disabled state (e.g. the retype-to-confirm modal's "Confirmer" button
+   before the typed name matches): without this, a disabled .tri-btn is
+   pixel-identical to an active one, so clicking it looks like it silently
+   does nothing instead of visibly refusing. */
+.tri-btn:disabled, .tri-btn:disabled:hover {
+  opacity: 0.45; cursor: not-allowed; background: var(--tri-muted); color: #fff;
+  border-color: var(--tri-muted);
+}
+.tri-btn-danger:disabled, .tri-btn-danger:disabled:hover {
+  background: transparent; color: var(--tri-muted); border-color: var(--tri-border);
+}
 .tri-icon-btn {
   background: transparent; border: none; color: var(--tri-muted); cursor: pointer;
   padding: 4px; border-radius: 6px; display: inline-flex; margin-left: 4px; font-family: inherit;
@@ -509,7 +542,27 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 
 /* Tables scroll horizontally on narrow viewports instead of overflowing the
    page or losing column alignment (see .tri-table-scroll wrapper). */
-.tri-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* Scroll-shadow affordance: two gradients scroll with the content and
+   fade out the edge once it's flush against a shadow, two more stay fixed
+   to the viewport and only show as a hint when there's more to reveal --
+   the classic Lea Verou trick. Without this, the edit/delete actions that
+   scroll off-screen on narrow viewports (a table wider than the wrapper)
+   give no visual sign they exist at all; the native scrollbar is invisible
+   on touch until the user is already dragging. */
+.tri-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background-color: var(--tri-bg);
+  background-image:
+    linear-gradient(to right, var(--tri-bg) 50%, rgba(255,255,255,0)),
+    linear-gradient(to left, var(--tri-bg) 50%, rgba(255,255,255,0)),
+    linear-gradient(to right, rgba(29,31,37,0.16), rgba(29,31,37,0)),
+    linear-gradient(to left, rgba(29,31,37,0.16), rgba(29,31,37,0));
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 24px 100%, 24px 100%, 10px 100%, 10px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
 .tri-table-scroll table.tri-table { min-width: 480px; }
 
 @media (max-width: 720px) {

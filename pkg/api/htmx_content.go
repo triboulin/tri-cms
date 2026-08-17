@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -456,6 +457,9 @@ func (s *Server) htmxContentList(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				cells = append(cells, contentCellVM{Text: formatCell(resolveReferenceLabels(data[f.Key], labels))})
+			case trischema.RichTextMD, trischema.RichTextHTML:
+				raw, _ := data[f.Key].(string)
+				cells = append(cells, contentCellVM{Text: formatCell(stripMarkupPreview(f.Type, raw))})
 			default:
 				cells = append(cells, contentCellVM{Text: formatCell(data[f.Key])})
 			}
@@ -515,6 +519,33 @@ func resolveReferenceLabels(raw any, labels map[string]string) any {
 // shows: rows are meant for scanning many records at a glance, not reading
 // full field values (the row-edit modal has the untruncated data).
 const cellTextLimit = 64
+
+var (
+	mdLinkRe       = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	mdListMarkerRe = regexp.MustCompile(`(?m)^\s*(?:[-*+]|\d+\.)\s+`)
+	mdMarkerRe     = regexp.MustCompile("[*_`#>]+")
+	htmlTagRe      = regexp.MustCompile(`<[^>]*>`)
+	whitespaceRe   = regexp.MustCompile(`\s+`)
+)
+
+// stripMarkupPreview turns a RichText_MD/RichText_HTML field's raw value
+// into a plain-text snippet for the collection list table: without this, the
+// table showed literal "**bold**"/"<p>…</p>" syntax instead of readable text,
+// making the list noisy to scan.
+func stripMarkupPreview(t trischema.FieldType, s string) string {
+	if s == "" {
+		return s
+	}
+	switch t {
+	case trischema.RichTextHTML:
+		s = htmlTagRe.ReplaceAllString(s, " ")
+	case trischema.RichTextMD:
+		s = mdLinkRe.ReplaceAllString(s, "$1")
+		s = mdListMarkerRe.ReplaceAllString(s, "")
+		s = mdMarkerRe.ReplaceAllString(s, "")
+	}
+	return strings.TrimSpace(whitespaceRe.ReplaceAllString(s, " "))
+}
 
 func formatCell(v any) string {
 	var s string
